@@ -1,0 +1,118 @@
+:root {
+    --ap-topbar-h: 64px;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Top navigation bar
+   ──────────────────────────────────────────────────────────────── */
+.navbar-header { padding-top: .4rem; padding-bottom: .4rem; }
+.app-nav-container { gap: .5rem; }
+.navbar-brand { display: flex; align-items: center; gap: .6rem; }
+.app-logo { height: 40px; width: 40px; }
+.app-brand-name { font-weight: 700; font-size: 1.3rem; letter-spacing: .02em; color: var(--bs-emphasis-color); }
+.app-brand-name span { font-weight: 400; color: #8fa3ab; }
+
+.app-nav { gap: .25rem; }
+.app-nav-link {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .5rem .85rem !important;
+    border-radius: .6rem;
+    color: var(--bs-secondary-color) !important;
+    font-weight: 500;
+    transition: background-color .12s ease, color .12s ease;
+}
+.app-nav-link i { font-size: 1.05rem; width: 1.2rem; text-align: center; }
+.app-nav-link:hover { color: var(--primary_light_text) !important; background: rgba(255, 255, 255, .06); }
+.app-nav-link.active { color: var(--primary_light_text) !important; background: rgba(202, 28, 35, .18); }
+.app-nav-link.active i { color: #f08a8e; }
+
+.app-account { font-weight: 500; color: var(--primary_light_text) !important; }
+
+.app-nav-toggler {
+    border: 1px solid rgba(255, 255, 255, .15);
+    border-radius: .6rem;
+    padding: .3rem .6rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--primary_light_text);
+}
+.app-nav-toggler:focus { box-shadow: 0 0 0 .2rem rgba(202, 28, 35, .35); }
+
+/* Desktop: links sit in the bar with an underline for the current page */
+@media (min-width: 992px) {
+    .app-nav-link.active { background: transparent; position: relative; }
+    .app-nav-link.active::after {
+        content: "";
+        position: absolute;
+        left: .85rem;
+        right: .85rem;
+        bottom: -.5rem;
+        height: 3px;
+        border-radius: 3px 3px 0 0;
+        background: var(--primary_brand);
+    }
+}
+
+/* Phone/tablet: full-width menu that drops down under the bar */
+@media (max-width: 991.98px) {
+    .app-logo { height: 34px; width: 34px; }
+    .app-brand-name { font-size: 1.15rem; }
+    #mainNav { padding: .5rem 0 .75rem; }
+    #mainNav .app-nav-link { padding: .8rem 1rem !important; font-size: 1.05rem; }
+    .app-nav-account {
+        margin-top: .5rem;
+        padding-top: .5rem;
+        border-top: 1px solid rgba(255, 255, 255, .08);
+    }
+    .app-nav-heading {
+        list-style: none;
+        padding: .5rem 1rem .25rem;
+        font-size: .8rem;
+        color: var(--bs-secondary-color);
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Page area
+   ──────────────────────────────────────────────────────────────── */
+.app-main {
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 2rem;
+}
+@media (max-width: 575.98px) {
+    .app-main { padding: .75rem .75rem 1.5rem; }
+}
+
+/* Toasts must fit on a phone */
+@media (max-width: 575.98px) {
+    #toastContainer { left: 0; right: 0; padding: .75rem !important; }
+    #toastContainer .toast { width: 100%; }
+}
+
+.app-page-title { font-size: 1.6rem; font-weight: 600; margin: .75rem 0 1rem; }
+@media (max-width: 575.98px) {
+    .app-page-title { font-size: 1.35rem; margin-top: .25rem; }
+}
+
+/* ───────── Facebook video background picker (Radio Systems + Triggers) ───────── */
+.fb-bg { display: flex; gap: 1rem; align-items: flex-start; padding: .85rem; border: 1px solid rgba(255,255,255,.08); border-radius: .6rem; background: rgba(255,255,255,.03); }
+.fb-bg-thumb { flex: 0 0 auto; width: 92px; aspect-ratio: 9 / 16; border-radius: .5rem; overflow: hidden; background: #000; border: 1px solid rgba(255,255,255,.12); }
+.fb-bg-thumb img, .fb-bg-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fb-bg-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; color: var(--bs-secondary-color); font-size: .75rem; }
+.fb-bg-empty i { font-size: 1.3rem; }
+.fb-bg-body { flex: 1; min-width: 0; display: grid; gap: .55rem; }
+.fb-bg-body .form-text { margin-top: 0; }
+.fb-bg-none { color: var(--bs-secondary-color); border: 1px dashed rgba(255,255,255,.2); background: transparent; font-weight: 500; white-space: normal; text-align: left; }
+.fb-bg-preview { margin-top: .75rem; }
+.fb-bg-preview video { display: block; width: 100%; max-width: 640px; border-radius: .5rem; background: #000; margin-bottom: .35rem; }
+.fb-bg-preview video.is-vertical { width: auto; max-width: 100%; height: min(60vh, 480px); }
+@media (max-width: 575.98px) {
+    .fb-bg { gap: .75rem; padding: .7rem; }
+    .fb-bg-thumb { width: 70px; }
+}
+
+.fb-bg-progress { height: .4rem; max-width: 18rem; margin: .1rem 0 .5rem; }

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>{% block title %}Flask Template{% endblock %}</title>
+
+    <!-- Favorite Icon -->
+    {% include 'partials/_favicons.html' %}
+
+    {% include 'partials/_head_common.html' %}
+
+    {% block extra_styles %}
+    {% endblock %}
+
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+{% include 'partials/_top_nav_menu.html' %}
+
+
+<main class="flex-grow-1 d-flex align-items-center">
+    <div class="container-fluid">
+        {% block content %}{% endblock %}
+    </div>
+</main>
+
+<!-- Toast Container -->
+<div aria-live="polite" aria-atomic="true" class="position-relative">
+    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3">
+        <!-- Toasts will be added here dynamically -->
+    </div>
+</div>
+
+{% include 'partials/_footer.html' %}
+
+<!-- Bootstrap 5.3 JS -->
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+
+
+<script src="{{ url_for('static', filename='js/global.js') }}"></script>
+
+{% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="flash-message d-none" data-category="{{ category }}" data-message="{{ message }}"></div>
+{% endfor %}
+
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,355 @@
+.rule-item { border: 1px dashed var(--bs-border-color); border-radius: .5rem; padding: .75rem; margin-bottom: .5rem; }
+.rule-item .btn-icon { padding: .25rem .5rem; }
+.rule-grid .form-label { font-size: .8rem; }
+
+/* ────────────────────────────────────────────────────────────────
+   Tone Rules DataTables theme (scoped)
+   Uses your global.css vars:
+   --primary_brand, --primary_brand_light
+   --secondary_brand, --secondary_brand_light
+   --primary_light_text, --secondary_light_text
+   --primary_dark_text, --secondary_dark_text
+   ──────────────────────────────────────────────────────────────── */
+
+.dt-theme {
+    /* host card feel */
+    background: var(--secondary_back);
+    border-radius: .75rem;
+}
+
+/* Use BS5 table CSS vars to recolor inside this scope */
+.dt-theme .table {
+    --bs-table-color: var(--primary_light_text);
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: rgba(126, 125, 125, 0.08); /* from secondary_brand_light */
+    --bs-table-striped-color: var(--primary_light_text);
+    --bs-table-hover-bg: rgba(202, 28, 35, 0.08);     /* primary_brand w/ alpha */
+    --bs-table-hover-color: var(--primary_light_text);
+    --bs-border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Header: dark surface + subtle gradient + softer borders */
+.dt-theme table.dataTable > thead > tr > th {
+    background: linear-gradient(
+            180deg,
+            rgba(53, 53, 53, 0.96) 0%,
+            rgba(53, 53, 53, 0.88) 100%
+    ); /* secondary_brand */
+    color: var(--primary_light_text);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+/* Sticky header inside the .table-responsive scroller */
+.dt-theme table.dataTable > thead > tr > th {
+    position: sticky; top: 0; z-index: 2; background-clip: padding-box;
+}
+
+/* Body cells: slightly muted text, stronger emphasis on key data */
+.dt-theme table.dataTable tbody td {
+    color: var(--primary_light_text);
+    vertical-align: middle;
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Empty state row */
+.dt-theme .dt-empty, .dt-theme table.dataTable tbody tr td.dataTables_empty {
+    color: var(--secondary_light_text) !important;
+}
+
+/* Row hover */
+.dt-theme .table-hover > tbody > tr:hover > * {
+    color: var(--primary_light_text);
+}
+
+/* Responsive child rows */
+.dt-theme table.dataTable > tbody > tr.child {
+    background: rgba(53, 53, 53, 0.45); /* secondary_brand w/ alpha */
+}
+.dt-theme table.dataTable > tbody > tr.child ul.dtr-details > li {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+.dt-theme table.dataTable > tbody > tr.child .dtr-title {
+    color: var(--secondary_light_text);
+}
+
+/* RowReorder handle + drag feedback */
+.dt-theme td.reorder-handle {
+    cursor: grab;
+    color: var(--secondary_light_text);
+    width: 1%;
+}
+.dt-theme td.reorder-handle:hover { color: var(--primary_light_text); }
+.dt-theme .dt-rowReorder-moving { opacity: .85; }
+.dt-theme .dt-rowReorder-float {
+    background: rgba(53, 53, 53, 0.95);
+    color: var(--primary_light_text);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.35);
+    border: 1px solid rgba(255,255,255,.08);
+}
+
+/* Action buttons inside table: soften outlines on dark */
+.dt-theme .btn-outline-secondary {
+    color: var(--primary_light_text);
+    border-color: rgba(255,255,255,.2);
+}
+.dt-theme .btn-outline-secondary:hover {
+    background: rgba(255,255,255,.06);
+    border-color: rgba(255,255,255,.3);
+}
+.dt-theme .btn-outline-danger {
+    color: #ff6b6b;
+    border-color: rgba(255,107,107,.35);
+}
+.dt-theme .btn-outline-danger:hover {
+    background: rgba(255,107,107,.08);
+    border-color: rgba(255,107,107,.5);
+}
+
+/* Compact the vertical rhythm a touch */
+.dt-theme .table.table-sm > :not(caption) > * > * {
+    padding-top: .45rem;
+    padding-bottom: .45rem;
+}
+
+/* Make the plus/minus control (if Responsive chooses one) match theme */
+.dt-theme td.dtr-control {
+    color: var(--secondary_light_text);
+}
+.dt-theme tr.parent td.dtr-control {
+    color: var(--primary_light_text);
+}
+
+/* Tone Rules accordion dark styling */
+.tone-acc .accordion-item {
+    background: rgb(53, 50, 50);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: .75rem;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.tone-acc .accordion-button {
+    background: linear-gradient(
+            180deg,
+            rgba(53, 53, 53, 0.96) 0%,
+            rgba(53, 53, 53, 0.88) 100%
+    );
+    color: var(--primary_light_text);
+    box-shadow: none;
+}
+.tone-acc .accordion-button:not(.collapsed) {
+    color: var(--primary_light_text);
+}
+
+.tone-acc .accordion-body {
+    background: rgba(53,53,53,.25);
+    color: var(--primary_light_text);
+}
+
+/* Keep the add button aligned and visible on all widths */
+.tone-acc .tone-acc-add {
+    margin-right: .75rem;
+}
+
+/* DTMF table: push Actions to the far right */
+#dtmfList_tbl th:last-child,
+#dtmfList_tbl td:last-child {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Optional: keep the grip column tight */
+#dtmfList_tbl th:first-child,
+#dtmfList_tbl td:first-child {
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Trigger list + side-panel editor
+   ──────────────────────────────────────────────────────────────── */
+.trig-search { max-width: 360px; }
+
+
+.trig-table { --bs-table-bg: transparent; }
+.trig-table thead th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--bs-secondary-color);
+    font-weight: 600;
+    border-bottom-width: 1px;
+    padding: .85rem 1rem;
+    white-space: nowrap;
+}
+.trig-table tbody td { padding: .75rem 1rem; }
+.trig-table tbody tr { cursor: pointer; }
+.trig-table tbody tr.trig-off td:not(:nth-last-child(-n+2)) { opacity: .5; }
+.trig-tones { max-width: 420px; }
+.trig-tone {
+    font-weight: 500;
+    font-size: .78rem;
+    margin: .1rem 0;
+    border: 1px solid transparent;
+}
+.trig-tone-two    { background: rgba(202, 28, 35, .15);  color: #f08a8e; border-color: rgba(202, 28, 35, .35); }
+.trig-tone-long   { background: rgba(13, 110, 253, .15); color: #8bb9fe; border-color: rgba(13, 110, 253, .35); }
+.trig-tone-hilow  { background: rgba(255, 193, 7, .12);  color: #ffd770; border-color: rgba(255, 193, 7, .3); }
+.trig-tone-pulsed { background: rgba(25, 135, 84, .15);  color: #75d6a4; border-color: rgba(25, 135, 84, .35); }
+.trig-tone-dtmf   { background: rgba(111, 66, 193, .18); color: #c3a6f5; border-color: rgba(111, 66, 193, .4); }
+.trig-menu-btn { text-decoration: none; padding: .15rem .45rem; }
+.trig-menu-btn:hover, .trig-menu-btn[aria-expanded="true"] { color: var(--bs-body-color) !important; background: rgba(255, 255, 255, .06); }
+.trig-table .form-switch .form-check-input { cursor: pointer; width: 2.25em; }
+
+/* Side panel */
+.trig-editor.offcanvas-end { width: min(880px, 100vw); }
+.trig-editor .offcanvas-header { border-bottom: 1px solid var(--bs-border-color); }
+/* Tabs stay pinned while the pane scrolls; pulled up over the body's top padding so nothing shows above them */
+.trig-editor .offcanvas-body { --trig-body-pt: 1rem; padding-top: var(--trig-body-pt); }
+.trig-editor #triggerTabs {
+    position: sticky; top: calc(-1 * var(--trig-body-pt)); z-index: 3;
+    background: var(--bs-offcanvas-bg, var(--bs-body-bg));
+    box-shadow: 0 calc(-1 * var(--trig-body-pt)) 0 var(--bs-offcanvas-bg, var(--bs-body-bg));
+}
+.trig-tabs .nav-link { position: relative; }
+.trig-table .form-switch { vertical-align: middle; }
+.trig-status { font-size: .8rem; color: var(--bs-secondary-color); margin-left: .35rem; vertical-align: middle; }
+.trig-status-on { color: #75d6a4; }
+
+/* Editor tabs: one row of equal pills, icon over label on phones */
+.trig-tabs {
+    gap: .35rem;
+    padding: .35rem;
+    border-radius: .75rem;
+    background: rgba(255, 255, 255, .04);
+    flex-wrap: nowrap;
+}
+.trig-tabs .nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    border-radius: .55rem;
+    padding: .5rem .5rem;
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+}
+.trig-tabs .nav-link:hover:not(.active) { background: rgba(255, 255, 255, .06); color: var(--primary_light_text); border-color: transparent; }
+.trig-tab-content { padding: 1.25rem .25rem 1rem; }
+.trig-tab-content h5 { margin-bottom: .25rem; }
+.tone-acc-add { white-space: nowrap; flex-shrink: 0; }
+
+@media (max-width: 575.98px) {
+    .trig-tabs .nav-link { flex-direction: column; gap: .15rem; font-size: .78rem; padding: .45rem .25rem; }
+    .trig-tabs .nav-link i { font-size: 1.1rem; }
+    #notifierOnCount { position: absolute; top: .3rem; right: .45rem; margin: 0 !important; }
+    .trig-editor .offcanvas-body { padding-left: .85rem; padding-right: .85rem; }
+    .tone-acc .accordion-button { padding: .75rem .85rem; font-size: .95rem; }
+    .tone-acc-add { padding: .3rem .55rem; margin-right: .5rem; }
+}
+
+/* Trigger list: each trigger becomes a card on narrow screens */
+@media (max-width: 767.98px) {
+    .trig-search { max-width: none; }
+    .trig-table thead { display: none; }
+    .trig-table, .trig-table tbody { display: block; }
+    .trig-table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "name   menu"
+            "tg     tg"
+            "tones  tones"
+            "status status";
+        row-gap: .35rem;
+        padding: .85rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, .08);
+    }
+    .trig-table tbody td { display: block; padding: 0; border: 0; }
+    .trig-table tbody td.d-none { display: none !important; }
+    /* Each trigger is one card here: highlight the whole card, not each line (table-hover paints cells) */
+    .trig-table > tbody > tr > *,
+    .trig-table.table-hover > tbody > tr:hover > * { --bs-table-bg-state: transparent; --bs-table-accent-bg: transparent; box-shadow: none; background: transparent; }
+    .trig-table tbody tr { -webkit-tap-highlight-color: transparent; transition: background-color .15s; }
+    .trig-table tbody tr:active { background: rgba(255, 255, 255, .05); }
+    @media (hover: hover) { .trig-table tbody tr:hover { background: rgba(255, 255, 255, .04); } }
+    .trig-c-name   { grid-area: name; font-size: 1.05rem; align-self: center; }
+    .trig-c-menu   { grid-area: menu; }
+    .trig-c-tg     { grid-area: tg; font-size: .9rem; }
+    .trig-c-tg::before { content: attr(data-label) " "; color: var(--bs-secondary-color); font-size: .8rem; margin-right: .25rem; }
+    .trig-c-tones  { grid-area: tones; max-width: none; }
+    .trig-c-status { grid-area: status; }
+    .trig-table tbody tr.trig-off td:not(.trig-c-status):not(.trig-c-menu) { opacity: .5; }
+}
+
+/* Desktop: the trigger editor opens as a centered dialog instead of a side panel */
+@media (min-width: 992px) {
+    .trig-editor.offcanvas-end {
+        top: 0; bottom: 0; left: 0; right: 0;
+        margin: auto;
+        width: min(960px, 92vw);
+        height: min(86vh, 920px);
+        border: 1px solid rgba(255, 255, 255, .1) !important;
+        border-radius: 1rem;
+        box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .55);
+        overflow: hidden;
+        transform: translateY(12px) scale(.98);
+        opacity: 0;
+        transition: transform .18s ease-out, opacity .18s ease-out, visibility .18s;
+    }
+    .trig-editor.offcanvas-end.showing,
+    .trig-editor.offcanvas-end.show:not(.hiding) { transform: none; opacity: 1; }
+    .trig-editor .offcanvas-header { padding: 1rem 1.5rem; margin-bottom: 0; background: rgba(255, 255, 255, .02); }
+    .trig-editor .offcanvas-body { --trig-body-pt: 1.25rem; padding: var(--trig-body-pt) 1.5rem 1.5rem; }
+    .offcanvas-backdrop.show { opacity: .6; }
+}
+
+/* ───────── Trigger notifiers (channel cards) ───────── */
+.trig-notifiers .accordion-item { border-color: rgba(255,255,255,.08); }
+.trig-notifiers .accordion-button { gap: .65rem; padding: .8rem 1rem; }
+.trig-notifiers .accordion-button::after { margin-left: .75rem; }
+.trig-notifiers .notif-icon { font-size: 1.15rem; width: 1.4rem; text-align: center; }
+.trig-notifiers .notif-name { font-weight: 600; }
+.trig-notifiers .notif-status { font-size: .72rem; font-weight: 600; }
+.trig-notifiers .notif-status-empty { color: var(--bs-secondary-color); background: transparent; border: 1px dashed rgba(255,255,255,.18); }
+.notif-icon-telegram { color: #2aabee; }
+.notif-icon-discord  { color: #5865f2; }
+.notif-icon-make     { color: #a46bf5; }
+.notif-icon-pushover { color: #249df1; }
+.notif-icon-email    { color: #f5b041; }
+.notif-icon-n8n      { color: #ea4b71; }
+.notif-icon-facebook { color: #1877f2; }
+.trig-notifiers .notif-enable { font-weight: 500; }
+.trig-notifiers .notif-group > summary,
+.trig-sys-opts > summary { cursor: pointer; user-select: none; }
+.trig-notifiers .notif-group { margin-left: .5rem; padding-left: 1rem; border-left: 2px solid rgba(255,255,255,.12); }
+.trig-notifiers .form-control-color { width: 3rem; }
+#notifierOnCount { font-size: .65rem; vertical-align: .1em; }
+.trig-notifiers .notif-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .3rem; }
+.trig-notifiers .notif-sys-badge { font-size: .72rem; font-weight: 600; }
+.notif-sys-in  { color: #8ec5ff; background: rgba(13,110,253,.14); border: 1px solid rgba(13,110,253,.35); }
+.notif-sys-out { color: #ffc56b; background: rgba(255,193,7,.1); border: 1px solid rgba(255,193,7,.35); }
+.trig-notifiers .notif-switches {
+    display: grid; gap: .75rem; padding: .85rem 1rem; margin-bottom: 1.1rem;
+    border-radius: .6rem; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07);
+}
+.trig-notifiers .notif-switches .form-check-label { font-weight: 500; }
+.trig-notifiers .notif-own-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .6rem; }
+.trig-notifiers .notif-rows:not(:empty) { margin-bottom: .5rem; }
+.trig-notifiers .notif-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.trig-notifiers .notif-row.has-inline { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto auto; }
+.trig-notifiers .notif-row-inline { white-space: nowrap; }
+@media (max-width: 575.98px) {
+    /* phones: label + remove on one line, value (and Inline) underneath */
+    .trig-notifiers .notif-row, .trig-notifiers .notif-row.has-inline {
+        grid-template-columns: minmax(0, 1fr) auto; padding-bottom: .6rem; border-bottom: 1px dashed rgba(255,255,255,.08);
+    }
+    .trig-notifiers .notif-row > :first-child { grid-column: 1; grid-row: 1; }
+    .trig-notifiers .notif-row-del { grid-column: 2; grid-row: 1; }
+    .trig-notifiers .notif-row > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+    .trig-notifiers .notif-row-inline { grid-column: 1 / -1; grid-row: 3; }
+    .trig-notifiers .accordion-button { flex-wrap: wrap; row-gap: .35rem; }
+}

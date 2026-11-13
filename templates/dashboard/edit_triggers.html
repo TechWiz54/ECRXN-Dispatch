@@ -1,0 +1,127 @@
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Triggers – ECRXN Dispatch{% endblock %}
+
+{% block extra_styles %}
+
+    <!-- DataTables 2.0.3 + Bootstrap 5 skin -->
+    <link href="{{ url_for('static', filename='vendor/datatables/datatables.min.css') }}" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard/edit_triggers.css') }}">
+
+{% endblock %}
+
+{% block content %}
+    {% include 'partials/_dashboard_trigger_modals.html' %}
+
+    <div class="row mb-3">
+        <div class="col-12 d-flex">
+            <div class="card border-0 flex-fill px-3 px-md-4 py-3">
+                <div class="card-body p-0">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-auto">
+                            <span class="fw-semibold">Triggers</span>
+                        </div>
+
+                        <!-- System selector -->
+                        <div class="col-auto d-flex align-items-center gap-2 ms-md-3">
+                            <label for="triggerSystemSelect" class="mb-0 small text-secondary">System</label>
+                            <select id="triggerSystemSelect" class="form-select form-select-sm w-auto"></select>
+                        </div>
+
+                        <!-- Search -->
+                        <div class="col-12 col-md ms-md-auto trig-search">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input id="triggerSearch" type="search" class="form-control"
+                                       placeholder="Search name, talkgroup or tone" autocomplete="off" disabled>
+                            </div>
+                        </div>
+
+                        <!-- Export / import -->
+                        <div class="col-auto dropdown">
+                            <button id="trigTransferBtn" class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                    data-bs-toggle="dropdown" aria-expanded="false" title="Export or import triggers">
+                                <i class="bi bi-arrow-down-up"></i><span class="d-none d-sm-inline"> Export / import</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><h6 class="dropdown-header">Download from <span data-trans-sys>this system</span></h6></li>
+                                <li><a class="dropdown-item" href="#" data-transfer="tones-csv"><i class="bi bi-filetype-csv"></i> Tones spreadsheet (CSV)</a></li>
+                                <li><a class="dropdown-item" href="#" data-transfer="triggers-json"><i class="bi bi-filetype-json"></i> Triggers file (JSON)</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" data-transfer="import"><i class="bi bi-upload"></i> Import into <span data-trans-sys>this system</span>…</a></li>
+                            </ul>
+                            <input type="file" id="trigImportFile" accept=".json,.csv,application/json,text/csv" hidden>
+                        </div>
+
+                        <!-- Add button -->
+                        <div class="col-auto">
+                            <button id="addTriggerBtn" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#triggerModal" disabled>
+                                <i class="bi bi-plus-lg"></i> Add Trigger
+                            </button>
+                        </div>
+                    </div>
+
+                    {# Kept hidden: the editor code tracks the open trigger through this select #}
+                    <div id="triggerSelectGroup" class="d-none">
+                        <select id="triggerSelect" aria-hidden="true" tabindex="-1"></select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trigger list -->
+    <div class="card border-0 trig-list-card">
+        <div class="card-body p-0">
+            <div id="triggerListEmpty" class="text-center py-5">
+                <h3><i class="bi bi-broadcast" style="color: var(--alertpage_red_light);"></i></h3>
+                <h5 class="fw-semibold mb-1" id="triggerListEmptyTitle">Select a system</h5>
+                <div class="text-secondary small" id="triggerListEmptyText">Choose a radio system above to see its triggers.</div>
+            </div>
+
+            <div id="triggerListWrap" class="table-responsive d-none">
+                <table class="table table-hover align-middle mb-0 trig-table">
+                    <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Talkgroup</th>
+                        <th>Tones</th>
+                        <th class="d-none d-lg-table-cell">Match</th>
+                        <th class="d-none d-md-table-cell">Last fired</th>
+                        <th>Status</th>
+                        <th class="text-end"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                    </thead>
+                    <tbody id="triggerListBody"></tbody>
+                </table>
+            </div>
+            <div id="triggerNoMatch" class="text-center text-secondary small py-4 d-none">No triggers match your search.</div>
+        </div>
+    </div>
+
+    <!-- Editor: slides in from the right -->
+    <div class="offcanvas offcanvas-end trig-editor" tabindex="-1" id="triggerEditor" aria-labelledby="triggerEditorTitle">
+        <div class="offcanvas-header">
+            <div>
+                <div class="small text-secondary">Edit trigger</div>
+                <h5 class="offcanvas-title mb-0" id="triggerEditorTitle">Trigger</h5>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            {% include 'partials/_dashboard_edit_trigger.html' %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    <!-- 1. DataTables Bootstrap 5 integration -->
+    <script src="{{ url_for('static', filename='vendor/datatables/datatables.min.js') }}"></script>
+
+    <script src="{{ url_for('static', filename='js/dashboard/fb_background.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard/transfer.js') }}"></script>
+    <script type="module" src="{{ url_for('static',
+                         filename='js/dashboard/edit_triggers.js') }}"></script>
+{% endblock %}

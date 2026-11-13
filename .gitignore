@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+log/
+var/
+static/audio/*
+!static/audio/.gitkeep
+
+# Windows setup builds (installer/windows/build.ps1)
+build/
+dist/
+
+# The browser demo is built locally (public/build_demo.py) and hosted on ecrxn.com, not kept in git
+public/ecrxn-dispatch-demo/

@@ -1,0 +1,64 @@
+# Releases are automatic: push a version tag and GitHub builds the Windows setup program and publishes
+# the release with it attached, plus notes listing the changes since the last tag.
+#
+#   git tag v1.2.0 && git push origin v1.2.0
+#
+# "Run workflow" on the Actions tab builds the setup program only (to try it), without a release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install requirements and compile
+        run: |
+          python -m pip install --quiet -r requirements.txt
+          python -m compileall -q app.py serve.py lib routes
+
+  windows-setup:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build ECRXN-Dispatch-Setup.exe
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^v', '' } else { '0.0.0-test' }
+          ./installer/windows/build.ps1 -Version $version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup
+          path: dist/*.exe
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: windows-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-setup
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.exe --title "ECRXN Dispatch $GITHUB_REF_NAME" --generate-notes

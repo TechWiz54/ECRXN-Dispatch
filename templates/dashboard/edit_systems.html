@@ -1,0 +1,117 @@
+{# templates/dashboard.html #}
+{% extends 'dashboard/base.html' %}
+
+{% block title %}Edit Systems - ECRXN Dispatch{% endblock %}
+
+{% block extra_styles %}
+    <style>
+        #updateSystemAddressExtractionForm .form-text {
+            min-height: 1.5rem; /* adjust to taste */
+        }
+    </style>
+    <link href="{{ url_for('static', filename='css/dashboard/edit_systems.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+    {% include 'partials/_dashboard_system_modals.html' %}
+    <div class="row g-3">
+        <!-- TOP TOOLBAR CARD -->
+        <div class="col-12">
+            <div class="card ap-toolbar-card border-0">
+                <div class="card-body py-3 px-3 px-md-4">
+                    <div class="row align-items-center g-2">
+                        <div class="col d-flex align-items-center gap-2" style="min-width: 0">
+                            <button id="backToSystemsBtn" type="button" class="btn btn-sm btn-outline-secondary d-none"
+                                    aria-label="All systems">
+                                <i class="bi bi-arrow-left"></i><span class="d-none d-sm-inline"> All systems</span>
+                            </button>
+                            <span id="liveFeedTitle" class="fw-semibold text-truncate">Radio Systems</span>
+                        </div>
+
+                        {# Kept hidden: the settings code tracks the open system through this select #}
+                        <div class="d-none">
+                            <select id="systemSelect" aria-hidden="true" tabindex="-1"></select>
+                        </div>
+
+                        <div class="col-auto ms-auto d-flex gap-2" id="systemsOverviewActions">
+                            <button id="importSystemBtn" type="button" class="btn btn-sm btn-outline-secondary"
+                                    data-bs-toggle="modal" data-bs-target="#importSystemModal" title="Create a system from an export file">
+                                <i class="bi bi-upload"></i> Import
+                            </button>
+                            <button id="addSystemBtn"
+                                    type="button"
+                                    class="btn btn-sm btn-primary"
+                                    data-bs-toggle="modal" data-bs-target="#addNewSystemModal">
+                                <i class="bi bi-plus-lg"></i> Add System
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM CONTENT CARD -->
+        <div class="col-12">
+            <div id="systemEditCard" class="card ap-content-card flex-fill border-0 p-0 d-none">
+                <div class="card-body d-flex flex-column flex-fill p-0">
+                    <div class="flex-fill">
+                        <div class="d-flex flex-column gap-2">
+                            {% include 'partials/_dashboard_edit_system.html' %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="noSystemCard">
+                <div id="systemCards" class="row g-3"></div>
+                <div id="systemCardsEmpty" class="card ap-content-card border-0 text-center py-5 d-none">
+                    <h3><i class="bi bi-broadcast" style="color: var(--alertpage_red_light); font-size: 32px;"></i></h3>
+                    <h5 class="fw-semibold mb-1">No radio systems yet</h5>
+                    <div class="text-secondary small">Click <strong>Add System</strong> to create your first one.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    <!-- Import a system from an export file -->
+    <div class="modal fade" id="importSystemModal" tabindex="-1" aria-labelledby="importSystemModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="importSystemForm" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importSystemModalLabel"><i class="bi bi-upload"></i> Import a system</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                    <div class="mb-3">
+                        <label class="form-label" for="importSystemFile">Export file (.json)</label>
+                        <input class="form-control" type="file" id="importSystemFile" name="file" accept=".json,application/json" required>
+                        <div class="form-text">Made with a system's <strong>Export</strong> tab (here or on another ECRXN Dispatch).</div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-5">
+                            <label class="form-label" for="importSystemDecimal">System ID</label>
+                            <input class="form-control" id="importSystemDecimal" name="system_decimal" inputmode="numeric" placeholder="From the file">
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label" for="importSystemName">Name</label>
+                            <input class="form-control" id="importSystemName" name="system_name" placeholder="From the file">
+                        </div>
+                    </div>
+                    <div class="form-text">Only needed when this server already has a system with the same ID or name.
+                        The imported system gets a new API key.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-upload"></i> Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/dashboard/fb_background.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard/transfer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard/edit_systems.js') }}"></script>
+    {{ super() }}
+{% endblock %}

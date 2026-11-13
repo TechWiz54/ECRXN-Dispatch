@@ -1,0 +1,79 @@
+{% macro nav_link(label, path, icon) %}
+    {# Active on the page itself and its sub-pages (/dashboard/ only matches exactly) #}
+    {% set p = request.path.rstrip('/') %}
+    {% set is_active = (p == path) if path == '/dashboard' else (p == path or p.startswith(path ~ '/')) %}
+    <li class="nav-item">
+        <a href="{{ path }}" class="nav-link app-nav-link {{ 'active' if is_active else '' }}"
+           {% if is_active %}aria-current="page"{% endif %}>
+            <i class="bi {{ icon }}"></i><span>{{ label }}</span>
+        </a>
+    </li>
+{% endmacro %}
+
+{% if "login" not in request.path %}
+    <!-- Top Navbar -->
+    <nav class="navbar sticky-top navbar-header navbar-expand-lg" aria-label="Main">
+        <div class="container-fluid app-nav-container">
+            <a href="/" class="navbar-brand me-lg-4">
+                <img src="{{ url_for('static', filename='img/brand/ecrxn-icon.svg') }}" class="app-logo" alt="" width="36" height="36">
+                <span class="app-brand-name">ECRXN <span>Dispatch</span></span>
+            </a>
+
+            {% if session.get("authenticated") %}
+                <button class="navbar-toggler app-nav-toggler" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#mainNav"
+                        aria-controls="mainNav" aria-expanded="false" aria-label="Open menu">
+                    <i class="bi bi-list"></i>
+                </button>
+
+                <div class="collapse navbar-collapse" id="mainNav">
+                    <ul class="navbar-nav app-nav me-auto">
+                        {{ nav_link('Dashboard', '/dashboard', 'bi-house-door-fill') }}
+                        {{ nav_link('Radio Systems', '/dashboard/systems', 'bi-broadcast') }}
+                        {{ nav_link('Triggers', '/dashboard/triggers', 'bi-bell-fill') }}
+                    </ul>
+
+                    <!-- Account: dropdown on desktop -->
+                    <ul class="navbar-nav d-none d-lg-flex">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle app-account" href="#" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle me-1"></i>{{ session.get('username') or 'Account' }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('dashboard.dashboard_change_password') }}">
+                                        <i class="bi bi-key-fill me-2"></i>Change Password
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('auth.auth_logout') }}">
+                                        <i class="bi bi-box-arrow-right me-2"></i>Log Out
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+
+                    <!-- Account: plain links in the phone menu -->
+                    <ul class="navbar-nav app-nav app-nav-account d-lg-none">
+                        <li class="app-nav-heading">
+                            <i class="bi bi-person-circle me-1"></i>Signed in as {{ session.get('username') or 'user' }}
+                        </li>
+                        {{ nav_link('Change Password', '/dashboard/change_password', 'bi-key-fill') }}
+                        <li class="nav-item">
+                            <a href="{{ url_for('auth.auth_logout') }}" class="nav-link app-nav-link">
+                                <i class="bi bi-box-arrow-right"></i><span>Log Out</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            {% else %}
+                <a href="{{ url_for('base_site.base_site_login') }}" class="btn primary-button ms-auto" role="button">
+                    Log&nbsp;In
+                </a>
+            {% endif %}
+        </div>
+    </nav>
+{% endif %}
