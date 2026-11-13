@@ -38,7 +38,7 @@ Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Stage, $Cache, $Out | Out-Null
 
 Step "Copying the app"
-foreach ($f in 'app.py', 'serve.py', 'requirements.txt', 'LICENSE', 'README.md', 'HOW-IT-WORKS.md', '.env.example') {
+foreach ($f in 'app.py', 'serve.py', 'requirements.txt', 'LICENSE', 'README.md', '.env.example') {
     Copy-Item (Join-Path $Repo $f) $Stage
 }
 foreach ($d in 'lib', 'routes', 'templates', 'static', 'migrations', 'docs') {
@@ -47,6 +47,10 @@ foreach ($d in 'lib', 'routes', 'templates', 'static', 'migrations', 'docs') {
 # never ship anyone's saved audio, and no byte-code caches
 Get-ChildItem (Join-Path $Stage 'static\audio') -Force | Where-Object Name -ne '.gitkeep' | Remove-Item -Recurse -Force
 Get-ChildItem $Stage -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force
+# every install starts blank: never ship a database, logs, settings or notes, even if a local build finds some
+foreach ($p in 'var', 'log', '.env', 'HOW-IT-WORKS.md', 'public') {
+    Remove-Item -Recurse -Force (Join-Path $Stage $p) -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force (Join-Path $Stage 'windows') | Out-Null
 Copy-Item (Join-Path $Here 'service.ps1'), (Join-Path $Here 'tray.py') (Join-Path $Stage 'windows')
 

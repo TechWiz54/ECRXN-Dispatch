@@ -63,7 +63,6 @@ the next start. Details: [Setup → Updating](docs/setup.md#updating).
 
 | Guide | What's in it |
 |---|---|
-| [How it works](HOW-IT-WORKS.md) | What happens to a call from upload to alert, how the parts fit, and why |
 | [Setup](docs/setup.md) | Install, first steps, updating, forgotten password, HTTPS, security, settings |
 | [Alerts](docs/alerts.md) | System and trigger alerts, sending the audio, Facebook, **every placeholder** |
 | [Uploads](docs/uploads.md) | The upload address for your scanner software, and split tones/voice uploads |

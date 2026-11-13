@@ -13,3 +13,6 @@ dist/
 
 # The browser demo is built locally (public/build_demo.py) and hosted on ecrxn.com, not kept in git
 public/ecrxn-dispatch-demo/
+
+# Internal notes, kept on this computer only
+HOW-IT-WORKS.md
