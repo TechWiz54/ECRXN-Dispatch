@@ -132,6 +132,19 @@ begin
         Result := Trim(Copy(Trim(Lines[I]), 6, 10));
 end;
 
+{ any KEY=value from the existing .env ('' if it isn't there) }
+function ReadEnvValue(Key: String): String;
+var
+  Lines: TArrayOfString;
+  I: Integer;
+begin
+  Result := '';
+  if LoadStringsFromFile(EnvPath, Lines) then
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      if Pos(Key + '=', Trim(Lines[I])) = 1 then
+        Result := Trim(Copy(Trim(Lines[I]), Length(Key) + 2, 200));
+end;
+
 function GetPort(Param: String): String;
 begin
   if NewEnv then
@@ -168,7 +181,7 @@ begin
     'You can change these later in the Settings (.env) shortcut. Write down the password: you log in with it.');
   SettingsPage.Add('Port:', False);
   SettingsPage.Add('Admin username:', False);
-  SettingsPage.Add('Admin password (at least 8 characters):', False);
+  SettingsPage.Add('Admin password (one is filled in for you; type your own if you like, 8+ characters):', False);
   SettingsPage.Add('Timezone (e.g. America/New_York, America/Chicago):', False);
   SettingsPage.Values[0] := '9911';
   SettingsPage.Values[1] := 'admin';
@@ -293,6 +306,10 @@ begin
     else
       WizardForm.FinishedLabel.Caption :=
         'ECRXN Dispatch was updated and is running again. Your settings, systems, triggers and saved calls were kept.' + #13#10 + #13#10 +
-        'Dashboard:  http://localhost:' + GetPort('');
+        'Dashboard:  http://localhost:' + GetPort('') + #13#10 +
+        'Username:   ' + ReadEnvValue('ROOT_USERNAME') + #13#10 + #13#10 +
+        'Your password hasn''t changed: it''s the one you chose when you first installed ECRXN Dispatch ' +
+        '(or changed it to in the dashboard). Forgot it? Start menu > ECRXN Dispatch > Reset the admin password ' +
+        '(right-click > Run as administrator).';
   end;
 end;
