@@ -85,9 +85,66 @@ def is_running() -> bool:
 
 
 def service(action: str, *extra: str) -> None:
-    """Start / stop / restart the background task (asks for admin rights)."""
+    """Start / stop / restart through service.ps1, which asks for admin rights. Only used when the task
+    can't be controlled directly (see control()), or to move the firewall rule after a port change."""
     subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                       "-File", SERVICE, f"-{action}", *extra], creationflags=NO_WINDOW)
+
+
+TASK = "ECRXN Dispatch"
+
+
+def schtasks(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["schtasks.exe", *args], capture_output=True, text=True, creationflags=NO_WINDOW)
+
+
+def task_running() -> bool:
+    """Whether Windows says the background task is running (it may still be starting up)."""
+    r = schtasks("/Query", "/TN", TASK, "/FO", "CSV", "/NH")
+    return r.returncode == 0 and '"Running"' in r.stdout
+
+
+def wait_for(check, seconds: float) -> bool:
+    end = time.time() + seconds
+    while time.time() < end:
+        if check():
+            return True
+        time.sleep(1)
+    return check()
+
+
+def control(action: str) -> tuple[bool, str]:
+    """Start / Stop / Restart and wait until it has really happened. The setup lets logged-in users run and
+    end this task, so no admin prompt; if that permission is missing, fall back to service.ps1 (prompt)."""
+    def end() -> bool:
+        if not task_running() and not is_running():
+            return True
+        r = schtasks("/End", "/TN", TASK)
+        if r.returncode != 0:
+            return False
+        return wait_for(lambda: not task_running() and not is_running(), 20)
+
+    def run() -> bool:
+        for _ in range(2):                       # once more if the first start didn't take
+            if not task_running():
+                if schtasks("/Run", "/TN", TASK).returncode != 0:
+                    return False
+            if wait_for(is_running, 45):
+                return True
+        return False
+
+    if action in ("Stop", "Restart") and not end():
+        if task_running() or is_running():        # no permission to end it: ask for admin rights instead
+            service(action)
+            ok = wait_for(lambda: (not is_running()) if action == "Stop" else is_running(), 60)
+            return ok, "" if ok else "Windows didn't allow stopping ECRXN Dispatch."
+    if action in ("Start", "Restart") and not run():
+        if not is_running():
+            service("Start")
+            if wait_for(is_running, 60):
+                return True, ""
+            return False, "ECRXN Dispatch didn't start. The logs folder (right-click the icon) says why."
+    return True, ""
 
 
 def message(text: str, title: str = "ECRXN Dispatch", error: bool = False) -> None:
@@ -163,14 +220,19 @@ def settings_window() -> None:
             message(f"Couldn't save the settings: {e}", error=True)
             return
         win.destroy()
-        # restart so they take effect (and move the firewall rule when the port changed)
-        service("Restart", *(["-Port", p] if p != old_port else []))
+        # restart so they take effect. A new port also moves the firewall rule, which needs admin rights.
+        if p != old_port:
+            service("Restart", "-Port", p)
+            return
+        ok, why = control("Restart")
+        if not ok:
+            message(why, error=True)
 
     btns = ttk.Frame(frm)
     btns.grid(row=8, column=0, columnspan=2, sticky="e", pady=(16, 0))
     ttk.Button(btns, text="Cancel", command=win.destroy).grid(row=0, column=0, padx=(0, 8))
     ttk.Button(btns, text="Save and restart", command=save).grid(row=0, column=1)
-    ttk.Label(frm, text="Saving restarts ECRXN Dispatch (Windows asks for permission).",
+    ttk.Label(frm, text="Saving restarts ECRXN Dispatch. Changing the port asks for admin rights (firewall).",
               foreground="#666").grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 0))
     win.mainloop()
 
@@ -191,23 +253,47 @@ def run_tray() -> None:
     import pystray
     from PIL import Image
 
-    state = {"up": False}
+    state = {"up": False, "starting": False, "busy": None}   # busy: "Starting…" etc. while an action runs
 
     def status_text(_item):
-        return f"Running on port {port()}" if state["up"] else "Stopped"
+        if state["busy"]:
+            return state["busy"]
+        if state["up"]:
+            return f"Running on port {port()}"
+        return "Starting…" if state["starting"] else "Stopped"
 
-    def act(action):
-        return lambda icon, item: service(action)
+    def refresh():
+        state["up"] = is_running()
+        state["starting"] = not state["up"] and task_running()
+        icon.title = f"ECRXN Dispatch - {status_text(None).lower()}"
+        icon.update_menu()
 
+    def act(action, label):
+        def go():
+            state["busy"] = label
+            refresh()
+            try:
+                ok, why = control(action)
+            finally:
+                state["busy"] = None
+                refresh()
+            if not ok:
+                icon.notify(why, "ECRXN Dispatch")
+
+        return lambda icon_, item: threading.Thread(target=go, daemon=True).start()
+
+    idle = lambda: not state["busy"] and not state["starting"]
     icon = pystray.Icon(
         "ECRXN Dispatch", Image.open(ICON), "ECRXN Dispatch",
         menu=pystray.Menu(
             pystray.MenuItem("Open dashboard", lambda i, it: webbrowser.open(dashboard_url()), default=True),
             pystray.MenuItem(status_text, None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Restart", act("Restart")),
-            pystray.MenuItem("Stop", act("Stop"), visible=lambda it: state["up"]),
-            pystray.MenuItem("Start", act("Start"), visible=lambda it: not state["up"]),
+            pystray.MenuItem("Restart", act("Restart", "Restarting…"), enabled=lambda it: idle()),
+            pystray.MenuItem("Stop", act("Stop", "Stopping…"), visible=lambda it: state["up"] or state["starting"],
+                             enabled=lambda it: not state["busy"]),
+            pystray.MenuItem("Start", act("Start", "Starting…"), visible=lambda it: not state["up"] and not state["starting"],
+                             enabled=lambda it: idle()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Settings…", lambda i, it: open_settings()),
             pystray.MenuItem("Open the logs folder", lambda i, it: os.startfile(os.path.join(ROOT, "log"))),
@@ -219,12 +305,9 @@ def run_tray() -> None:
 
     def watch():
         while True:
-            up = is_running()
-            if up != state["up"]:
-                state["up"] = up
-                icon.title = f"ECRXN Dispatch - {status_text(None).lower()}"
-                icon.update_menu()
-            time.sleep(5)
+            if not state["busy"]:
+                refresh()
+            time.sleep(2 if state["starting"] else 5)
 
     threading.Thread(target=watch, daemon=True).start()
     icon.run()

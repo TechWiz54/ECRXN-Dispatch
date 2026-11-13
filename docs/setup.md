@@ -34,8 +34,8 @@ it for:
 |---|---|
 | Open dashboard | Opens it in your browser |
 | Running on port 9911 / Stopped | Whether it's running right now |
-| Restart, Stop / Start | Windows asks for permission, because it runs as a background task |
-| Settings… | Port, the address used in alert links, timezone and log detail. **Save and restart** applies them (and moves the firewall rule if the port changed) |
+| Restart, Stop / Start | Shows *Starting…* / *Stopping…* until it has really happened, and a notice if it fails |
+| Settings… | Port, the address used in alert links, timezone and log detail. **Save and restart** applies them (changing the port also moves the firewall rule, so Windows asks for admin rights then) |
 | Open the logs folder, Help | |
 | Hide this icon | Hides the icon only; ECRXN Dispatch keeps running. It's back at the next login, or from the Start menu |
 

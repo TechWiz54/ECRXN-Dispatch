@@ -61,6 +61,17 @@ if ($Install) {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
     Register-ScheduledTask -TaskName $Task -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    # Let logged-in users start and stop this one task (read + run only, never change it), so the tray icon's
+    # Start / Stop / Restart work without an admin prompt.
+    try {
+        $sched = New-Object -ComObject Schedule.Service
+        $sched.Connect()
+        $t = $sched.GetFolder('\').GetTask($Task)
+        $sd = $t.GetSecurityDescriptor(4)        # the DACL only ("D:(A;;...)...")
+        if ($sd -notmatch '\(A;;GRGX;;;AU\)') { $t.SetSecurityDescriptor($sd + '(A;;GRGX;;;AU)', 0) }
+    } catch {
+        # not fatal: the tray then asks for admin rights to start / stop instead
+    }
     if ($Firewall -and $Port -gt 0) {
         New-NetFirewallRule -DisplayName $Task -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
     }
