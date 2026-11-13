@@ -1,6 +1,7 @@
 # lib/facebook_module.py
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ import requests
 from lib.dispatch_text_render import expand_template, html_to_text
 
 module_logger = logging.getLogger("icad_dispatch.facebook_module")
+_PAGE_TOKENS: Dict[Tuple[str, str], Tuple[str, float]] = {}   # (page id, token hash) -> (page token, good until)
 
 FB_MAX_MESSAGE = 5000
 POST_TYPES = ("post", "video")
@@ -312,7 +314,8 @@ class FacebookSettings:
 class FacebookSender:
     """
     Publishes an alert to a Facebook Page (Pages can be posted to via the API; personal profiles can't).
-    Needs the Page ID and a Page access token with pages_manage_posts (+ publish_video for video posts).
+    Needs the Page ID and a token with pages_manage_posts, pages_read_engagement and pages_show_list:
+    a Page access token, or a user / system-user token for someone who can post on the Page.
     """
 
     def __init__(self, settings: FacebookSettings, *, logger: Optional[logging.Logger] = None):
@@ -399,8 +402,31 @@ class FacebookSender:
                     except OSError:
                         pass
 
+    def _page_token(self) -> Optional[str]:
+        """The token to post with. A Page token is used as it is; a user or system-user token (e.g. the
+        never-expiring one from Meta Business Suite) is swapped for the Page's own token, asked from Facebook
+        and kept for an hour."""
+        given = self.settings.page_token
+        key = (self.settings.page_id, hashlib.sha256((given or "").encode()).hexdigest())
+        hit = _PAGE_TOKENS.get(key)
+        if hit and hit[1] > time.time():
+            return hit[0]
+        token = given
+        try:
+            r = requests.get(f"{_graph()}/{self.settings.page_id}",
+                             params={"fields": "access_token", "access_token": given}, timeout=10)
+            body = r.json() if 200 <= r.status_code < 300 else {}
+            if isinstance(body, dict) and body.get("access_token"):
+                token = body["access_token"]
+        except Exception:     # noqa: BLE001 - any trouble: use the token as given; posting reports real problems
+            pass
+        _PAGE_TOKENS[key] = (token, time.time() + 3600)
+        return token
+
     def _post(self, url: str, *, data: Dict[str, Any], files: Optional[Dict[str, Any]] = None,
               timeout_s: int, max_retries: int) -> bool:
+        if data.get("access_token"):
+            data = dict(data, access_token=self._page_token())
         attempt = 0
         while attempt <= max_retries:
             attempt += 1

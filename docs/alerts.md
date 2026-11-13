@@ -101,22 +101,49 @@ the **Page ID** and a **Page access token**. Setting it up takes about 15 minute
    manages the Page. The first time, click **Get started** and verify your account.
 2. **My Apps → Create app.** Give it a name such as "ECRXN Dispatch" and your email.
 3. When asked what the app should do (the **use case**), choose **Manage everything on your Page**. If you're asked
-   for an app type instead, pick **Business**. Connecting a business portfolio is optional.
-4. Open the use case's **Customize** (or **Permissions**) page and add these permissions:
-   `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, and `publish_video` (for video posts).
+   for an app type instead, pick **Business**. Connect it to your **business portfolio** (Meta Business Suite);
+   step 3 needs that.
+4. Open the use case's **Customize** (or **Permissions**) page and add `pages_manage_posts`,
+   `pages_read_engagement` and `pages_show_list`. That's all it needs, for text posts and video posts alike.
+   (Older guides mention `publish_video`; Meta no longer uses it for Page videos, which is why you won't find it.)
+5. Your Facebook account needs full control of the Page (or at least the **Create content** task), or Facebook
+   refuses posts even with the right permissions.
 
-### 3. Get a Page access token that doesn't expire
+### 3. Get a token that never expires (recommended)
 
-1. Open the **[Graph API Explorer](https://developers.facebook.com/tools/explorer/)**. Top right, pick **your
-   app** under *Meta App*, and under *User or Page* choose **Get User Access Token**. Tick the permissions from
-   step 2.4 and click **Generate Access Token**. Facebook asks you to allow them; choose your Page.
-2. That token lasts about an hour, so extend it: click the **ⓘ** next to the token → **Open in Access Token
-   Tool** → **Extend Access Token** at the bottom. Copy the long token it shows.
-3. Back in the Graph API Explorer, paste that long token into **Access Token**, type `me/accounts` in the address
-   box and click **Submit**. Find your Page in the answer and copy its **`access_token`**. Made from an extended
-   token, this Page token **doesn't expire** (unless you change your Facebook password or remove the app).
-4. Optional check: paste it into the [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/).
-   It should say *Type: Page* and *Expires: Never*.
+A normal Page token is tied to your personal login: it stops working if you change your Facebook password, log
+out everywhere or remove the app, and Meta can also make it re-confirm access every few months. Tools that run
+unattended, like n8n or Make, use one of two things: you click **Connect Facebook** again whenever it expires, or
+a **system user**, a non-person account in your business portfolio whose token you set to never expire. ECRXN
+Dispatch works with the system user, so you set it up once:
+
+1. Open **[Meta Business Suite settings](https://business.facebook.com/settings)** for the business portfolio
+   that owns the Page (add the Page under **Accounts → Pages** first if it isn't there).
+2. **Users → System users → Add.** Name it "ECRXN Dispatch" and give it the **Admin** role.
+3. With the system user selected, click **Assign assets**: pick your **Page** and turn on **Full control** (or at
+   least *Create content*). Click **Assign assets** again and add your **app** too.
+4. Click **Generate token**. Pick your app, set **Token expiration** to **Never**, tick `pages_manage_posts`,
+   `pages_read_engagement` and `pages_show_list`, and click **Generate token**. Copy it right away: Meta shows it
+   only once.
+
+Paste that token into ECRXN Dispatch as the **Page access token**. It is a system-user token, not a Page token,
+and that's fine: ECRXN Dispatch asks Facebook for the Page's own token with it each time it posts. It keeps
+working until you delete the system user or remove its access to the Page.
+
+**No business portfolio?** Use the Graph API Explorer instead. It also gives a token without a time limit, but
+one tied to your personal login (see above):
+
+1. In the **[Graph API Explorer](https://developers.facebook.com/tools/explorer/)**, pick **your app** under
+   *Meta App*, choose **Get User Access Token**, tick the three permissions and click **Generate Access Token**.
+   Allow them and choose your Page.
+
+   > Picking your Page in the **User or Page** menu now gives you a Page token straight away, but that one only
+   > lasts about an hour (it comes from a short-lived login). For one that lasts, carry on with steps 2 and 3.
+2. Click the **ⓘ** next to the token → **Open in Access Token Tool** → **Extend Access Token**. Copy the long token.
+3. Back in the Explorer, paste it into **Access Token**, run `me/accounts` and copy your Page's **`access_token`**
+   (the Page token, not the extended one you pasted). The
+   [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/) should show *Type: Page* and
+   *Expires: Never*. If you paste the extended *user* token instead, it runs out after about 60 days.
 
 ### 4. Switch the app to Live
 
@@ -127,13 +154,14 @@ to **Live** so everyone sees them:
    `https://ecrxn.com/privacy`), pick a **Category**, upload an **App icon**, and **Save changes**.
 2. At the top of the app dashboard, switch **App Mode** from **Development** to **Live**.
 
-You don't need App Review to post to a Page you manage yourself.
+You don't need App Review to post to a Page your own business manages.
 
 ### 5. Put it in ECRXN Dispatch
 
 On **Radio Systems → Facebook** (or a trigger's **Notifiers → Facebook**), paste the **Page ID** and the **Page
 access token**, save, and press **Send test**. If Facebook refuses, the message says why (for example *"Invalid
-OAuth access token"* means the token was copied wrong or has expired: repeat step 3).
+OAuth access token"* means the token was copied wrong or has expired: repeat step 3; *"(#200) Permissions
+error"* means your account or the system user can't create content on the Page: check step 2.5 / 3.3).
 
 **Post as a video with the call audio** (off by default):
 

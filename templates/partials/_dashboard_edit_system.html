@@ -1505,15 +1505,16 @@
                         <h5 id="facebookTabTitle">Facebook Settings</h5>
                         <p class="small text-body-secondary mt-2 mb-0" style="max-width: 46rem;">
                             Posts each alert to a Facebook <strong>Page</strong> (Facebook doesn't let apps post to personal
-                            profiles). You need the Page ID and a long-lived Page access token with the
-                            <code>pages_manage_posts</code> permission (plus <code>publish_video</code> to post the audio as a video).
+                            profiles). You need the Page ID and a token with <code>pages_manage_posts</code>,
+                            <code>pages_read_engagement</code> and <code>pages_show_list</code> (the same for text and video posts).
                         </p>
                         <ol class="small text-body-secondary mt-2 mb-0 ps-3" style="max-width: 46rem;">
                             <li><strong>Page ID:</strong> open your Page and click the Page name. In the box that opens,
                                 <em>Page transparency</em> lists the Page ID.</li>
                             <li><strong>Token:</strong> make an app at developers.facebook.com (use case <em>Manage everything
-                                on your Page</em>), get a Page token in the Graph API Explorer, extend it so it never expires,
-                                and switch the app to <strong>Live</strong>. Step by step: <code>docs/alerts.md</code> → Facebook.</li>
+                                on your Page</em>) and switch it to <strong>Live</strong>. Best: in Meta Business Suite, add a
+                                <em>system user</em>, give it the Page and the app, and generate a token that <strong>never
+                                expires</strong>; paste it here as is. Step by step: <code>docs/alerts.md</code> → Facebook.</li>
                         </ol>
 
                         <form id="updateSystemFacebookForm" class="mt-4 input-form" autocomplete="off">
