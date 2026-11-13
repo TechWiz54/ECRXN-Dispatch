@@ -51,7 +51,8 @@ sudo ./install_linux.sh
 ```
 
 Both installers write your settings file (`.env`) and show the dashboard address and your admin login. Then
-follow **[Setup → First steps](docs/setup.md#first-steps)**.
+follow **[Setup → First steps](docs/setup.md#first-steps)**. Lost the login? It's saved in `.env`:
+[Setup → Forgot the admin password?](docs/setup.md#forgot-the-admin-password).
 
 ## Updating
 

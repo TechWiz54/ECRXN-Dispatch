@@ -108,15 +108,30 @@ begin
   Result := ExpandConstant('{app}\.env');
 end;
 
+{ A new password for every install. The letters come from a fresh Windows GUID, so no two installs get the
+  same one even if the script's own random numbers repeat. }
 function RandomPassword: String;
 var
-  Chars: String;
-  I: Integer;
+  Chars, Seed: String;
+  I, N: Integer;
+  Typelib: Variant;
 begin
   Chars := 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  Seed := '';
+  try
+    Typelib := CreateOleObject('Scriptlet.TypeLib');
+    Seed := Typelib.Guid;
+  except
+    Seed := '';
+  end;
   Result := '';
   for I := 1 to 14 do
-    Result := Result + Chars[Random(Length(Chars)) + 1];
+  begin
+    N := Random(Length(Chars));
+    if I + 1 <= Length(Seed) then
+      N := (N + Ord(Seed[I + 1]) * 31 + Ord(Seed[Length(Seed) - I]) * 7) mod Length(Chars);
+    Result := Result + Chars[N + 1];
+  end;
 end;
 
 { PORT=... from an existing .env (upgrades keep their port) }

@@ -87,7 +87,8 @@ cp .env.example .env                           # then edit it
 ## First steps
 
 **1. Log in.** Open `http://<server>:9911` and sign in with the admin login the installer printed. Then change
-the password (**your name, top right → Change Password**). Until you do, a yellow banner reminds you.
+the password (**your name, top right → Change Password**). Until you do, a yellow banner reminds you. Lost the
+login? It's in `.env`: see [Forgot the admin password?](#forgot-the-admin-password).
 
 **2. Add a radio system.** **Radio Systems → Add System**:
 
@@ -147,6 +148,17 @@ each runs once). For extra peace of mind, download each system first: open it on
 ---
 
 ## Forgot the admin password?
+
+**What's the default login?** There isn't a shared one, so nobody can guess it. The username is `admin` unless
+you typed another. The password is the one the installer filled in (or you typed) and showed on its last page.
+It's saved in the settings file:
+
+- **Windows:** open `C:\Program Files\ECRXN Dispatch\.env` in Notepad.
+- **Linux:** `sudo cat /opt/icad_dispatch/.env`.
+
+Look for the `ROOT_USERNAME=` and `ROOT_PASSWORD=` lines. (Running it yourself from `.env.example`, it's
+`admin` / `changeme123` until you change it.) If you changed the password in the dashboard later, that file still
+shows the first one; reset it instead:
 
 You need access to the server itself, which is what keeps this safe:
 
