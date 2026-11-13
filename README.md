@@ -39,7 +39,8 @@ Nothing to install, and nothing you type in it goes anywhere.
 
 **Windows 10 / 11:** download **`ECRXN-Dispatch-Setup-<version>.exe`** from the
 [latest release](https://github.com/TechWiz54/ECRXN-Dispatch/releases/latest) and run it. It brings its own Python
-and ffmpeg, runs in the background and starts with Windows.
+and ffmpeg, runs in the background and starts with Windows, with a tray icon by the clock to restart it or
+change its settings.
 
 **Linux:**
 
@@ -80,7 +81,7 @@ the next start. Details: [Setup → Updating](docs/setup.md#updating).
 | `migrations/` | Database changes, applied in order on start |
 | `docs/` | The guides and an example uploader |
 | `public/` | Builds the browser demo (`build_demo.py`); the demo itself is hosted on ecrxn.com, not kept here |
-| `install_linux.sh`, `installer/windows/` | The Linux installer, and the Windows setup program's build files |
+| `install_linux.sh` | The Linux installer (the Windows setup program is built from `.github/windows-installer/`) |
 | `var/`, `log/`, `static/audio/`, `.env` | Yours: database, logs, audio, settings. Made on your computer, never in git |
 
 ## Credits and license

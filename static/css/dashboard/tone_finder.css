@@ -556,3 +556,8 @@ body.has-player { padding-bottom: 72px; }
     .tf-view-switch .nav-link { width: 100%; padding: .4rem .6rem; font-size: .9rem; }
 }
 #unmatchedTable tbody tr { cursor: pointer; }
+@media (max-width: 575.98px) {
+    /* phones: "Add trigger" shows just its icon so the buttons fit beside the tone */
+    .tf-unmatched-actions [data-unmatched-add] { font-size: 0; padding-left: .55rem; padding-right: .55rem; }
+    .tf-unmatched-actions [data-unmatched-add] .bi { font-size: .875rem; }
+}

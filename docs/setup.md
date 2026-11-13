@@ -26,19 +26,26 @@ Both installers set up everything ECRXN Dispatch needs and write your settings t
 Everything it needs comes inside the setup program (its own Python and ffmpeg), so nothing else gets installed.
 It goes to `C:\Program Files\ECRXN Dispatch`.
 
-The **Start menu → ECRXN Dispatch** folder has:
+**The tray icon.** While you're logged in, the ECRXN Dispatch icon sits next to the clock (click the **^** arrow
+if it's hidden; drag it onto the taskbar to keep it in view). Double-click it to open the dashboard; right-click
+it for:
 
-| Shortcut | |
+| Menu | |
 |---|---|
-| ECRXN Dispatch | Opens the dashboard |
-| Restart ECRXN Dispatch | After changing settings (asks for admin rights) |
-| Settings (.env) | Your settings file |
-| Logs | The log folder |
-| Reset the admin password | See [Forgot the password?](#forgot-the-admin-password) |
+| Open dashboard | Opens it in your browser |
+| Running on port 9911 / Stopped | Whether it's running right now |
+| Restart, Stop / Start | Windows asks for permission, because it runs as a background task |
+| Settings… | Port, the address used in alert links, timezone and log detail. **Save and restart** applies them (and moves the firewall rule if the port changed) |
+| Open the logs folder, Help | |
+| Hide this icon | Hides the icon only; ECRXN Dispatch keeps running. It's back at the next login, or from the Start menu |
+
+ECRXN Dispatch itself runs at boot even when nobody is logged in; the icon is only the remote control. The
+**Start menu → ECRXN Dispatch** folder has the dashboard, the settings window, the logs, *Reset the admin password*
+and *Uninstall*.
 
 > **Used the old `install_windows.bat` before?** Run the setup program, then copy `.env`, the `var` folder and
 > `static\audio` from your old folder into `C:\Program Files\ECRXN Dispatch` (replace what's there) and use
-> **Restart ECRXN Dispatch**. The old "iCAD Dispatch" startup task and firewall rule are removed for you.
+> **Restart** (tray icon). The old "iCAD Dispatch" startup task and firewall rule are removed for you.
 
 ### Linux
 
@@ -197,7 +204,8 @@ Found a security problem? Please report it privately to the maintainers rather t
 
 ## Settings (.env)
 
-The installer writes `.env`; [`.env.example`](../.env.example) lists everything. Restart after changes.
+The installer writes `.env`; [`.env.example`](../.env.example) lists everything. Restart after changes. On Windows,
+the tray icon's **Settings…** changes the port, alert link address, timezone and log detail for you.
 
 | Setting | What it does |
 |---|---|

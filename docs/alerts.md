@@ -101,8 +101,8 @@ the **Page ID** and a **Page access token**. Setting it up takes about 15 minute
    manages the Page. The first time, click **Get started** and verify your account.
 2. **My Apps → Create app.** Give it a name such as "ECRXN Dispatch" and your email.
 3. When asked what the app should do (the **use case**), choose **Manage everything on your Page**. If you're asked
-   for an app type instead, pick **Business**. Connect it to your **business portfolio** (Meta Business Suite);
-   step 3 needs that.
+   for an app type instead, pick **Business**. If it offers to connect a **business portfolio**, pick yours (or
+   skip it and connect it later, in step 3a).
 4. Open the use case's **Customize** (or **Permissions**) page and add `pages_manage_posts`,
    `pages_read_engagement` and `pages_show_list`. That's all it needs, for text posts and video posts alike.
    (Older guides mention `publish_video`; Meta no longer uses it for Page videos, which is why you won't find it.)
@@ -111,39 +111,59 @@ the **Page ID** and a **Page access token**. Setting it up takes about 15 minute
 
 ### 3. Get a token that never expires (recommended)
 
-A normal Page token is tied to your personal login: it stops working if you change your Facebook password, log
-out everywhere or remove the app, and Meta can also make it re-confirm access every few months. Tools that run
-unattended, like n8n or Make, use one of two things: you click **Connect Facebook** again whenever it expires, or
-a **system user**, a non-person account in your business portfolio whose token you set to never expire. ECRXN
-Dispatch works with the system user, so you set it up once:
+Tools that run on their own, like n8n or Make, either ask you to click **Connect Facebook** again when the token
+runs out, or use a **system user**: a non-person account in a Meta *business portfolio* whose token can be set to
+never expire. ECRXN Dispatch works with a system user, so you only do this once.
 
-1. Open **[Meta Business Suite settings](https://business.facebook.com/settings)** for the business portfolio
-   that owns the Page (add the Page under **Accounts → Pages** first if it isn't there).
-2. **Users → System users → Add.** Name it "ECRXN Dispatch" and give it the **Admin** role.
-3. With the system user selected, click **Assign assets**: pick your **Page** and turn on **Full control** (or at
-   least *Create content*). Click **Assign assets** again and add your **app** too.
-4. Click **Generate token**. Pick your app, set **Token expiration** to **Never**, tick `pages_manage_posts`,
+**a. Put your Page in a business portfolio.** Most people don't have one yet; it's free:
+
+1. Go to **[business.facebook.com](https://business.facebook.com)**.
+2. On the left, under the **Meta Business Suite** logo, is your Page's or portfolio's name. Hover over (or click)
+   it: at the bottom of the list are your **business portfolios** and other assets. If you have none, choose
+   **Create a business portfolio** and fill in your name and email.
+3. Open the portfolio's **Settings** (the gear at the bottom left) → **Accounts → Pages → Add → Add a Page**, and
+   type your Page's name. Because you manage the Page, it's added straight away.
+4. Still in Settings: **Accounts → Apps → Add → Connect an app ID**, and enter your app's ID (shown at the top of
+   your app on developers.facebook.com).
+
+**b. Make the system user and its token:**
+
+1. In the portfolio's Settings: **Users → System users → Add.** Name it "ECRXN Dispatch" and give it the **Admin**
+   role.
+2. With the system user selected, click **Assign assets**: pick your **Page** and turn on **Full control** (or at
+   least *Create content*). Click **Assign assets** again and add your **app**.
+3. Click **Generate token**. Pick your app, set **Token expiration** to **Never**, tick `pages_manage_posts`,
    `pages_read_engagement` and `pages_show_list`, and click **Generate token**. Copy it right away: Meta shows it
    only once.
 
-Paste that token into ECRXN Dispatch as the **Page access token**. It is a system-user token, not a Page token,
-and that's fine: ECRXN Dispatch asks Facebook for the Page's own token with it each time it posts. It keeps
-working until you delete the system user or remove its access to the Page.
+Paste that token into ECRXN Dispatch as the **Page access token**. It's a system-user token, not a Page token, and
+that's fine: ECRXN Dispatch asks Facebook for the Page's own token with it each time it posts. It keeps working
+until you delete the system user or take away its access to the Page.
 
-**No business portfolio?** Use the Graph API Explorer instead. It also gives a token without a time limit, but
-one tied to your personal login (see above):
+**Without a business portfolio (Graph API Explorer).** This works, but the token does **not** last forever:
+Meta asks you to renew it every couple of months, so you'll be back here to repeat it. Use it to try things out,
+and the system user for everyday use.
 
 1. In the **[Graph API Explorer](https://developers.facebook.com/tools/explorer/)**, pick **your app** under
    *Meta App*, choose **Get User Access Token**, tick the three permissions and click **Generate Access Token**.
-   Allow them and choose your Page.
-
-   > Picking your Page in the **User or Page** menu now gives you a Page token straight away, but that one only
-   > lasts about an hour (it comes from a short-lived login). For one that lasts, carry on with steps 2 and 3.
+   Allow them and choose your Page. (Picking your Page in the **User or Page** menu gives a Page token straight
+   away, but that one lasts only about an hour.)
 2. Click the **ⓘ** next to the token → **Open in Access Token Tool** → **Extend Access Token**. Copy the long token.
-3. Back in the Explorer, paste it into **Access Token**, run `me/accounts` and copy your Page's **`access_token`**
-   (the Page token, not the extended one you pasted). The
-   [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/) should show *Type: Page* and
-   *Expires: Never*. If you paste the extended *user* token instead, it runs out after about 60 days.
+3. Back in the Explorer, paste it into **Access Token**, run `me/accounts` and copy your Page's **`access_token`**.
+   Paste that one into ECRXN Dispatch (not the extended token itself, which runs out after about 60 days).
+
+### If posting still doesn't work
+
+Paste your token into the [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/) and check:
+
+- **Scopes** lists `pages_manage_posts`, `pages_read_engagement` and `pages_show_list`, and **Granular scopes**
+  shows your Page's ID next to them. If your Page isn't there, the token was made without access to it: for a
+  system user, assign the Page (step b.2) and generate a new token; in the Explorer, choose the Page when Facebook
+  asks which Pages to allow.
+- **Valid: True** and, for a system user, **Expires: Never**.
+- The app is **Live** (step 4) and connected to the same business portfolio as the Page (step a.4).
+
+The **Send test** button shows Facebook's own error message; that message says what's missing.
 
 ### 4. Switch the app to Live
 

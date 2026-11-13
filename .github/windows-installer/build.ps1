@@ -4,7 +4,7 @@
 
     Needs: Windows, Python 3.12 (the same minor version as the bundled Python), Inno Setup 6 (iscc.exe).
 
-      powershell -ExecutionPolicy Bypass -File installer\windows\build.ps1 -Version 1.2.0
+      powershell -ExecutionPolicy Bypass -File .github\windows-installer\build.ps1 -Version 1.2.0
 
     The setup carries everything: the app, a private Python, its packages and ffmpeg, so nothing else
     needs installing on the computer it runs on.
@@ -48,7 +48,7 @@ foreach ($d in 'lib', 'routes', 'templates', 'static', 'migrations', 'docs') {
 Get-ChildItem (Join-Path $Stage 'static\audio') -Force | Where-Object Name -ne '.gitkeep' | Remove-Item -Recurse -Force
 Get-ChildItem $Stage -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force
 New-Item -ItemType Directory -Force (Join-Path $Stage 'windows') | Out-Null
-Copy-Item (Join-Path $Here 'service.ps1') (Join-Path $Stage 'windows')
+Copy-Item (Join-Path $Here 'service.ps1'), (Join-Path $Here 'tray.py') (Join-Path $Stage 'windows')
 
 Step "Bundling Python $PyVersion"
 $embedZip = Join-Path $Cache "python-$PyVersion-embed-amd64.zip"
@@ -58,6 +58,20 @@ Expand-Archive $embedZip (Join-Path $Stage 'python') -Force
 $pth = Get-ChildItem (Join-Path $Stage 'python') -Filter 'python*._pth' | Select-Object -First 1
 $lines = (Get-Content $pth.FullName) | Where-Object { $_ -notmatch '^#?\s*import site' }
 Set-Content $pth.FullName (@($lines) + @('..', '..\pydeps', 'import site')) -Encoding ascii
+
+# the tray icon's settings window uses tkinter, which the embeddable Python leaves out: take it from $Python
+Step "Adding tkinter"
+$base = (& $Python -c "import sys; print(sys.base_prefix)").Trim()
+$pyDir = Join-Path $Stage 'python'
+Copy-Item -Recurse (Join-Path $base 'Lib\tkinter') (Join-Path $pyDir 'tkinter')
+Remove-Item -Recurse -Force (Join-Path $pyDir 'tkinter\test') -ErrorAction SilentlyContinue
+foreach ($dll in '_tkinter.pyd', 'tcl86t.dll', 'tk86t.dll', 'zlib1.dll') {
+    $f = Join-Path $base "DLLs\$dll"
+    if (Test-Path $f) { Copy-Item $f $pyDir }
+}
+New-Item -ItemType Directory -Force (Join-Path $pyDir 'tcl') | Out-Null
+Get-ChildItem (Join-Path $base 'tcl') -Directory | Where-Object Name -match '^(tcl|tk)\d' |
+    ForEach-Object { Copy-Item -Recurse $_.FullName (Join-Path $pyDir "tcl\$($_.Name)") }
 
 Step "Installing packages"
 & $Python -m pip install --disable-pip-version-check -q --target (Join-Path $Stage 'pydeps') -r (Join-Path $Repo 'requirements.txt')
@@ -77,7 +91,7 @@ $ffLicense = Get-ChildItem $ffTmp -Recurse -Filter 'LICENSE*' | Select-Object -F
 if ($ffLicense) { Copy-Item $ffLicense.FullName (Join-Path $Stage 'ffmpeg\LICENSE.txt') }
 
 Step "Checking the bundled app starts"
-& (Join-Path $Stage 'python\python.exe') -c "import flask, waitress, bcrypt, pydub, icad_tone_detection, PIL; print('imports ok')"
+& (Join-Path $Stage 'python\python.exe') -c "import flask, waitress, bcrypt, pydub, icad_tone_detection, PIL, pystray, tkinter; print('imports ok, Tcl', tkinter.Tcl().eval('info patchlevel'))"
 if ($LASTEXITCODE -ne 0) { throw "The bundled Python can't load the app's packages." }
 
 Step "Building the setup program"

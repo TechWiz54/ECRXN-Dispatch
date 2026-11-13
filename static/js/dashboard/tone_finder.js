@@ -3282,13 +3282,15 @@ function renderUnmatched() {
         `${g.count}×`,
         `<span title="${esc(new Date(g.last_epoch * 1000).toLocaleString())}">${esc(ago(g.last_epoch))}</span>`,
         g.talkgroups.length ? g.talkgroups.map(esc).join(", ") : '<span class="text-secondary">—</span>',
-        `<div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-success" data-unmatched-listen="${g.last_call_id}" title="Open the latest call">
-                <i class="bi bi-play-fill"></i></button>
-            <button type="button" class="btn btn-primary" data-unmatched-add="${i}" title="Add a trigger for this tone">
+        `<div class="d-flex flex-wrap gap-2 align-items-center tf-unmatched-actions">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-success" data-unmatched-listen="${g.last_call_id}" title="Open the latest call">
+                    <i class="bi bi-play-fill"></i></button>
+                <button type="button" class="btn btn-danger" data-unmatched-del="${i}" title="Delete the calls with this tone">
+                    <i class="bi bi-trash"></i></button>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary text-nowrap" data-unmatched-add="${i}" title="Add a trigger for this tone">
                 <i class="bi bi-plus-circle"></i> Add trigger</button>
-            <button type="button" class="btn btn-danger" data-unmatched-del="${i}" title="Delete the calls with this tone">
-                <i class="bi bi-trash"></i></button>
         </div>`,
         g.last_epoch,
     ]);

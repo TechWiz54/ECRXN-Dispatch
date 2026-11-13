@@ -188,12 +188,13 @@ always looks like the real thing.
 ## Releases
 
 Pushing a version tag (for example `v1.2.0`) to GitHub runs `.github/workflows/release.yml`. It checks the code
-installs and compiles, builds the Windows setup program on a GitHub Windows machine (`installer/windows/build.ps1`:
+installs and compiles, builds the Windows setup program on a GitHub Windows machine (`.github/windows-installer/build.ps1`:
 the app, the embeddable Python with its packages, and ffmpeg, packed by Inno Setup), and publishes the release
 with `ECRXN-Dispatch-Setup-<version>.exe` attached and notes listing the changes. Nobody builds anything by hand.
 
 On Windows the setup installs to `C:\Program Files\ECRXN Dispatch` and runs the app at startup as a background
-task. A newer setup replaces only the program files, so `.env`, `var\`, `log\` and `static\audio\` carry over.
+task, so it works before anyone logs in. A tray icon (`tray.py`) starts, stops and restarts it and edits the main
+settings. A newer setup replaces only the program files, so `.env`, `var\`, `log\` and `static\audio\` carry over.
 
 ---
 

@@ -57,6 +57,7 @@ Type: filesandordirs; Name: "{app}\static\css"
 Type: filesandordirs; Name: "{app}\static\js"
 Type: filesandordirs; Name: "{app}\static\img"
 Type: filesandordirs; Name: "{app}\static\vendor"
+Type: files; Name: "{app}\windows\ECRXN Dispatch.url"
 
 [Dirs]
 ; so .env and the logs can be opened without "access denied"
@@ -69,24 +70,26 @@ Name: "{app}\static\audio"
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "ecrxn.ico"; DestDir: "{app}\windows"; Flags: ignoreversion; AfterInstall: WriteEnvIfNew
 
-[INI]
-Filename: "{app}\windows\ECRXN Dispatch.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:{code:GetPort}/"
-
 [Icons]
-Name: "{group}\ECRXN Dispatch"; Filename: "{app}\windows\ECRXN Dispatch.url"; IconFilename: "{app}\windows\ecrxn.ico"
-Name: "{group}\Restart ECRXN Dispatch"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-    Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\windows\service.ps1"" -Restart"; \
-    IconFilename: "{app}\windows\ecrxn.ico"; Comment: "Restart after changing the settings"
-Name: "{group}\Settings (.env)"; Filename: "{win}\notepad.exe"; Parameters: """{app}\.env"""
+; the tray icon (next to the clock) starts at login; its right-click menu starts / stops / restarts ECRXN Dispatch
+Name: "{commonstartup}\ECRXN Dispatch"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\windows\tray.py"""; \
+    WorkingDir: "{app}"; IconFilename: "{app}\windows\ecrxn.ico"; Comment: "ECRXN Dispatch tray icon"
+Name: "{group}\ECRXN Dispatch"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\windows\tray.py"" --open"; \
+    WorkingDir: "{app}"; IconFilename: "{app}\windows\ecrxn.ico"; Comment: "Open the dashboard"
+Name: "{group}\ECRXN Dispatch settings"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\windows\tray.py"" --settings"; \
+    WorkingDir: "{app}"; IconFilename: "{app}\windows\ecrxn.ico"; Comment: "Port, alert link address, timezone"
 Name: "{group}\Logs"; Filename: "{app}\log"
 Name: "{group}\Reset the admin password"; Filename: "{app}\python\python.exe"; Parameters: """{app}\serve.py"" --reset-password"; WorkingDir: "{app}"
 Name: "{group}\Uninstall ECRXN Dispatch"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\ECRXN Dispatch"; Filename: "{app}\windows\ECRXN Dispatch.url"; IconFilename: "{app}\windows\ecrxn.ico"; Tasks: desktopicon
+Name: "{autodesktop}\ECRXN Dispatch"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\windows\tray.py"" --open"; \
+    WorkingDir: "{app}"; IconFilename: "{app}\windows\ecrxn.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
     Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\service.ps1"" -Install -Port {code:GetPort} {code:FirewallArg}"; \
     Flags: runhidden waituntilterminated; StatusMsg: "Starting ECRXN Dispatch..."
+; the tray icon, for the person who ran the setup (not as admin)
+Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\windows\tray.py"""; WorkingDir: "{app}"; Flags: nowait runasoriginaluser
 Filename: "http://localhost:{code:GetPort}/"; Description: "Open the dashboard"; Flags: postinstall shellexec nowait skipifsilent
 
 [UninstallRun]
@@ -253,16 +256,26 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
+  Script: String;
 begin
   if CurStep = ssInstall then
   begin
     NewEnv := not FileExists(EnvPath);
     if not NewEnv then ExistingPort := ReadEnvPort;
-    { stop the running copy before its files are replaced }
-    if FileExists(ExpandConstant('{app}\windows\service.ps1')) then
+    { Stop the running copy (and its tray icon) before its files are replaced. Done here rather than with the
+      installed service.ps1, so it works whatever version is installed. }
+    if DirExists(ExpandConstant('{app}\python')) then
+    begin
+      Script := 'Stop-ScheduledTask -TaskName ''ECRXN Dispatch'' -ErrorAction SilentlyContinue' + #13#10 +
+        'Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(''' +
+        ExpandConstant('{app}') + '\'', [StringComparison]::OrdinalIgnoreCase) } | ' +
+        'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }' + #13#10 +
+        'Start-Sleep -Seconds 1';
+      SaveStringToFile(ExpandConstant('{tmp}\stop-ecrxn.ps1'), Script, False);
       Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-        '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\windows\service.ps1') + '" -Stop',
+        '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\stop-ecrxn.ps1') + '"',
         '', SW_HIDE, ewWaitUntilTerminated, Code);
+    end;
   end;
 end;
 
@@ -276,7 +289,7 @@ begin
         'Dashboard:  http://localhost:' + GetPort('') + #13#10 +
         'Username:   ' + Trim(SettingsPage.Values[1]) + #13#10 +
         'Password:   ' + Trim(SettingsPage.Values[2]) + #13#10 + #13#10 +
-        'Change the password after you log in. The Start menu has the dashboard, settings, logs and a restart shortcut.'
+        'Change the password after you log in. The ECRXN Dispatch icon next to the clock opens the dashboard and settings, and restarts it (right-click).'
     else
       WizardForm.FinishedLabel.Caption :=
         'ECRXN Dispatch was updated and is running again. Your settings, systems, triggers and saved calls were kept.' + #13#10 + #13#10 +

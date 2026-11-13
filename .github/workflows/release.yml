@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME -replace '^v', '' } else { '0.0.0-test' }
-          ./installer/windows/build.ps1 -Version $version
+          ./.github/windows-installer/build.ps1 -Version $version
       - uses: actions/upload-artifact@v4
         with:
           name: windows-setup
