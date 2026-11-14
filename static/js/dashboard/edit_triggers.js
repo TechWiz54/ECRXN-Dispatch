@@ -1568,7 +1568,7 @@ const NOTIFIERS = [
         { k: "post_type", label: "Post as a video with the call audio (off = text post with a link)", type: "switch", on: "video", off: "post" },
         { k: "background", label: "Video background", type: "fbbg" },
         { k: "message_body", label: "Post text", type: "textarea", ph: "Blank = use the system's text", help: TEMPLATE_HELP },
-    ], note: "Posts to a Facebook Page (Facebook doesn't let apps post to personal profiles). The token needs pages_manage_posts, pages_read_engagement and pages_show_list. A never-expiring system-user token from Meta Business Suite works too." },
+    ], note: "Posts to a Facebook Page (Facebook doesn't let apps post to personal profiles). Use a system-user token from your Meta business portfolio, set to never expire, with pages_show_list, pages_manage_posts, pages_read_engagement and business_management. Step by step: docs/alerts.md → Facebook." },
 ];
 
 let notifState = null;   // { channels: {ch: cfg}, system: {...}, system_includes: {ch: 0|1}, pushover: {...} }

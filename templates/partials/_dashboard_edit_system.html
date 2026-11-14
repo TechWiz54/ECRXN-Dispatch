@@ -1511,10 +1511,12 @@
                         <ol class="small text-body-secondary mt-2 mb-0 ps-3" style="max-width: 46rem;">
                             <li><strong>Page ID:</strong> open your Page and click the Page name. In the box that opens,
                                 <em>Page transparency</em> lists the Page ID.</li>
-                            <li><strong>Token:</strong> make an app at developers.facebook.com (use case <em>Manage everything
-                                on your Page</em>) and switch it to <strong>Live</strong>. Best: in Meta Business Suite, add a
-                                <em>system user</em>, give it the Page and the app, and generate a token that <strong>never
-                                expires</strong>; paste it here as is. Step by step: <code>docs/alerts.md</code> → Facebook.</li>
+                            <li><strong>Token:</strong> in a Meta business portfolio's settings, add your Page, create an app
+                                (use case <em>Manage everything on your Page</em>), add a <em>system user</em> (Admin) and give it
+                                full control of the app and the Page. Then <em>Generate token</em> for that app, set it to
+                                <strong>never expire</strong>, tick the permissions above plus <code>business_management</code>,
+                                and paste it here as is. Switch the app to <strong>Live</strong>. Step by step:
+                                <code>docs/alerts.md</code> → Facebook.</li>
                         </ol>
 
                         <form id="updateSystemFacebookForm" class="mt-4 input-form" autocomplete="off">
