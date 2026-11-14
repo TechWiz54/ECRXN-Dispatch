@@ -18,7 +18,7 @@ from routes import base_site, auth, dashboard, api_systems, api_call_upload, bp_
 from lib.logging_module import CustomLogger
 
 app_name = "icad_dispatch"
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 DEFAULT_TIMEZONE = "America/New_York"
 
 load_dotenv()
