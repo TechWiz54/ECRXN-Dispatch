@@ -32,7 +32,7 @@ who need to know, with the audio.
 - **AI add-ons**: transcription, address finding and incident type (OpenAI or self-hosted).
 - **Web dashboard** that works on phones, with login protection and a lockout for repeated wrong passwords.
 
-**Try it first:** the [browser demo](https://www.bradford-business.net/ecrxn-dispatch-demo/) is the real dashboard running on made-up data.
+**Try it first:** the [browser demo](https://ecrxn.com/ecrxn-dispatch/) is the real dashboard running on made-up data.
 Nothing to install, and nothing you type in it goes anywhere.
 
 ## Install
@@ -88,7 +88,7 @@ the next start. Details: [Setup → Updating](docs/setup.md#updating).
 | `templates/`, `static/` | The dashboard's pages, styles, scripts and images |
 | `migrations/` | Database changes, applied in order on start |
 | `docs/` | The guides and an example uploader |
-| `public/` | Builds the browser demo (`build_demo.py`); the demo itself is hosted at [bradford-business.net](https://www.bradford-business.net/ecrxn-dispatch-demo/), not kept here |
+| `public/` | Builds the browser demo (`build_demo.py`); the demo itself is hosted at [ecrxn.com](https://ecrxn.com/ecrxn-dispatch/), not kept here |
 | `Dockerfile`, `docker-compose.yml` | The Docker image (published to Docker Hub on each release) and a ready stack |
 | `install_linux.sh` | The Linux installer (the Windows setup program is built from `.github/windows-installer/`) |
 | `var/`, `log/`, `static/audio/`, `.env` | Yours: database, logs, audio, settings. Made on your computer, never in git |

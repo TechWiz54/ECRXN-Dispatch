@@ -11,7 +11,7 @@ static/audio/*
 build/
 dist/
 
-# The browser demo is built locally (public/build_demo.py) and hosted on bradford-business.net, not kept in git
+# The browser demo is built locally (public/build_demo.py) and hosted at ecrxn.com/ecrxn-dispatch/, not kept in git
 public/ecrxn-dispatch-demo/
 
 # Internal notes, kept on this computer only
