@@ -1,0 +1,16 @@
+# Kept out of the Docker image: local data and settings, builds, the demo, Windows-only files
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+.env
+var
+log
+static/audio/*
+!static/audio/.gitkeep
+build
+dist
+public/ecrxn-dispatch-demo
+HOW-IT-WORKS.md
+docker-compose.yml

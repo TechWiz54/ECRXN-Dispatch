@@ -1,0 +1,28 @@
+# ECRXN Dispatch with Docker Compose, or as a Portainer stack (Stacks -> Add stack -> paste this).
+# Change BASE_URL to the address people use to reach it, then deploy. The admin password is printed in the
+# container's log on the first start (or set ROOT_PASSWORD below before the first start).
+# More settings: docs/docker.md
+
+services:
+  ecrxn-dispatch:
+    image: pbradford15/ecrxn-dispatch:latest
+    container_name: ecrxn-dispatch
+    restart: unless-stopped
+    ports:
+      - "9911:9911"
+    environment:
+      BASE_URL: "http://192.168.1.50:9911"
+      TIMEZONE: "America/New_York"
+      ROOT_USERNAME: "admin"
+      # ROOT_PASSWORD: ""            # first start only; leave unset for a random one (shown in the log)
+      # SESSION_COOKIE_SECURE: "True"  # when it's behind HTTPS
+      # OPENAI_API_KEY: ""
+    volumes:
+      - ecrxn-data:/app/var
+      - ecrxn-logs:/app/log
+      - ecrxn-audio:/app/static/audio
+
+volumes:
+  ecrxn-data:
+  ecrxn-logs:
+  ecrxn-audio:

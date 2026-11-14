@@ -6,7 +6,7 @@
 
 <p align="center">
   Tone detection and alerting for scanner and dispatch audio.<br>
-  Runs on <b>Windows</b> and <b>Linux</b>. No Docker needed.<br>
+  Runs on <b>Windows</b>, <b>Linux</b> and <b>Docker</b> (Portainer too).<br>
   By the <a href="https://ecrxn.com">East Coast Receiver Network</a>.
 </p>
 
@@ -50,13 +50,20 @@ cd ECRXN-Dispatch
 sudo ./install_linux.sh
 ```
 
-Both installers write your settings file (`.env`) and show the dashboard address and your admin login. Then
+**Docker / Portainer:** the image is
+[`pbradford15/ecrxn-dispatch`](https://hub.docker.com/r/pbradford15/ecrxn-dispatch) (amd64 and Raspberry Pi
+arm64). Paste the stack from **[Docker and Portainer](docs/docker.md)** into Portainer, or use
+[`docker-compose.yml`](docker-compose.yml), set `BASE_URL` and deploy. The admin login is printed in the
+container's log on the first start.
+
+The Windows and Linux installers write your settings file (`.env`) and show the dashboard address and your admin login. Then
 follow **[Setup → First steps](docs/setup.md#first-steps)**. Lost the login? It's saved in `.env`:
 [Setup → Forgot the admin password?](docs/setup.md#forgot-the-admin-password).
 
 ## Updating
 
-Windows: run the newer setup program. Linux: `git pull`, then the installer again. Your settings, database and
+Windows: run the newer setup program. Linux: `git pull`, then the installer again. Docker: pull the new image
+and recreate the container. Your settings, database and
 saved audio are never part of a download, so they can't be overwritten, and database changes apply themselves on
 the next start. Details: [Setup → Updating](docs/setup.md#updating).
 
@@ -65,6 +72,7 @@ the next start. Details: [Setup → Updating](docs/setup.md#updating).
 | Guide | What's in it |
 |---|---|
 | [Setup](docs/setup.md) | Install, first steps, updating, forgotten password, HTTPS, security, settings |
+| [Docker and Portainer](docs/docker.md) | The Docker image, a Portainer stack, settings, volumes, updating |
 | [Alerts](docs/alerts.md) | System and trigger alerts, sending the audio, Facebook, **every placeholder** |
 | [Uploads](docs/uploads.md) | The upload address for your scanner software, and split tones/voice uploads |
 | [AI features](docs/ai-features.md) | Transcription, address extraction, incident classification |
@@ -81,6 +89,7 @@ the next start. Details: [Setup → Updating](docs/setup.md#updating).
 | `migrations/` | Database changes, applied in order on start |
 | `docs/` | The guides and an example uploader |
 | `public/` | Builds the browser demo (`build_demo.py`); the demo itself is hosted at [bradford-business.net](https://www.bradford-business.net/ecrxn-dispatch-demo/), not kept here |
+| `Dockerfile`, `docker-compose.yml` | The Docker image (published to Docker Hub on each release) and a ready stack |
 | `install_linux.sh` | The Linux installer (the Windows setup program is built from `.github/windows-installer/`) |
 | `var/`, `log/`, `static/audio/`, `.env` | Yours: database, logs, audio, settings. Made on your computer, never in git |
 

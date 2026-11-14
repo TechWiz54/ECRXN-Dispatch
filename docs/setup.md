@@ -10,7 +10,8 @@ Install ECRXN Dispatch, get your first call in, keep it updated. About ten minut
 
 ## Install
 
-Both installers set up everything ECRXN Dispatch needs and write your settings to a `.env` file for you.
+Both installers set up everything ECRXN Dispatch needs and write your settings to a `.env` file for you. Prefer
+Docker or Portainer? See [Docker](#docker-and-portainer) below.
 
 ### Windows 10 / 11
 
@@ -70,6 +71,13 @@ Options: `--dir PATH`, `--port N`, `--user NAME`, `--no-service`, `--unattended`
 
 > The service user can't write to `/home` or system folders. To copy audio to another drive, use a folder under
 > `/mnt`, `/media`, `/srv` or `/opt` and run `sudo chown icad_dispatch:icad_dispatch /mnt/usb/audio`.
+
+### Docker and Portainer
+
+The image is `pbradford15/ecrxn-dispatch` on Docker Hub (amd64 and Raspberry Pi arm64). Paste the stack from
+**[Docker and Portainer](docker.md#portainer)** into Portainer (or use the repository's `docker-compose.yml`),
+set `BASE_URL`, deploy, and read the admin login from the container's log. Settings are environment variables
+instead of a `.env` file; everything else on this page works the same.
 
 ### Without an installer (any OS)
 
@@ -131,6 +139,8 @@ send its own alert to a different channel, group or Page.
   [Releases page](https://github.com/TechWiz54/ECRXN-Dispatch/releases) and run it. It stops ECRXN Dispatch,
   replaces the program and starts it again, without asking anything.
 - **Linux:** `git pull` in the folder you installed from, then `sudo ./install_linux.sh` again.
+- **Docker / Portainer:** pull the new image and recreate the container; your data is in its volumes. See
+  [Docker → Updating](docker.md#updating).
 
 **Nothing of yours is replaced.** An update only replaces the program's own files. These are yours and are never
 in the download, so they can't be overwritten:
@@ -156,7 +166,8 @@ It's saved in the settings file:
 - **Windows:** open `C:\Program Files\ECRXN Dispatch\.env` in Notepad.
 - **Linux:** `sudo cat /opt/icad_dispatch/.env`.
 
-Look for the `ROOT_USERNAME=` and `ROOT_PASSWORD=` lines. (Running it yourself from `.env.example`, it's
+Look for the `ROOT_USERNAME=` and `ROOT_PASSWORD=` lines. (Docker: the password was printed in the container's
+log on the first start; see [Docker → The admin login](docker.md#the-admin-login).) (Running it yourself from `.env.example`, it's
 `admin` / `changeme123` until you change it.) If you changed the password in the dashboard later, that file still
 shows the first one; reset it instead:
 
@@ -167,6 +178,8 @@ You need access to the server itself, which is what keeps this safe:
 - **Or,** on Windows, right-click **Start menu → ECRXN Dispatch → Reset the admin password → Run as
   administrator**. On Linux: `sudo -u icad_dispatch /opt/icad_dispatch/.venv/bin/python /opt/icad_dispatch/serve.py --reset-password`.
   It asks for the new password twice; add a username at the end to reset someone else.
+- **Docker:** `docker exec -it -u icad_dispatch ecrxn-dispatch python serve.py --reset-password` (Portainer:
+  [Docker → Forgot the password?](docker.md#forgot-the-password)).
 
 Either way, "Remember me" logins on other devices are signed out. `ROOT_USERNAME` / `ROOT_PASSWORD` in `.env`
 only create the admin on the very first start; changing them later does nothing.
@@ -265,3 +278,6 @@ sudo rm /etc/systemd/system/icad_dispatch.service
 sudo rm -rf /opt/icad_dispatch          # deletes the database and audio too
 sudo userdel icad_dispatch
 ```
+
+**Docker:** remove the stack (Portainer) or `docker compose down`. Your data stays in the volumes; delete them
+too (`docker volume rm ecrxn-dispatch_ecrxn-data ...`, or **Volumes** in Portainer) if you don't want to keep it.

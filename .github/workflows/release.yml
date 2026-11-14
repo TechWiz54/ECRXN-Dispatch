@@ -1,5 +1,6 @@
 # Releases are automatic: push a version tag and GitHub builds the Windows setup program and publishes
-# the release with it attached, plus notes listing the changes since the last tag.
+# the release with it attached, plus notes listing the changes since the last tag. It also pushes the
+# Docker image to Docker Hub (pbradford15/ecrxn-dispatch).
 #
 #   git tag v1.2.0 && git push origin v1.2.0
 #
@@ -47,6 +48,62 @@ jobs:
           name: windows-setup
           path: dist/*.exe
           if-no-files-found: error
+
+  # The Docker image, for amd64 PCs and arm64 (Raspberry Pi 4/5). On a tag it's pushed to Docker Hub as
+  # pbradford15/ecrxn-dispatch:<version>, :<major.minor> and :latest; "Run workflow" only builds it, to try it.
+  # Needs the repository secret DOCKERHUB_TOKEN (a Docker Hub access token with Read & Write).
+  docker:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.ref_type == 'tag'
+        with:
+          username: pbradford15
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: pbradford15/ecrxn-dispatch
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=sha,enable=${{ github.ref_type != 'tag' }}
+      - name: Build the image to try it
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ecrxn-dispatch:test
+          cache-from: type=gha
+      - name: Try it (starts, shows the login page, prints the first admin password)
+        run: |
+          docker run -d --name try -p 9911:9911 -e BASE_URL=http://localhost:9911 ecrxn-dispatch:test
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9911/login || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          docker logs try
+          [ "$code" = "200" ] || { echo "The login page didn't answer"; exit 1; }
+          docker logs try 2>&1 | grep -q "Password:" || { echo "No admin password in the log"; exit 1; }
+          docker exec try sh -c 'ffmpeg -version >/dev/null && stat -c %U /proc/1' | grep -qx icad_dispatch \
+            || { echo "ffmpeg missing or not running as icad_dispatch"; exit 1; }
+          docker rm -f try
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref_type == 'tag' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   release:
     if: github.ref_type == 'tag'
