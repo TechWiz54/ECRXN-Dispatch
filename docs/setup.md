@@ -108,9 +108,10 @@ login? It's in `.env`: see [Forgot the admin password?](#forgot-the-admin-passwo
 
 Open the system's **General** tab and copy its **API Key**.
 
-**3. Turn on Tone Finder.** On the system's **Tones** tab set **Tone Finder** to **Enabled** and save. Calls are
-kept when Tone Finder is on and tones were heard, or when a trigger fires. Leave the other tone settings at their
-defaults to start.
+**3. Check Tone Finder is on.** A new system has **Tone Finder** enabled (the system's **Tones** tab). Calls are
+kept when Tone Finder is on and tones were heard, or when a trigger fires; with it off, calls that match no
+trigger are accepted and then thrown away, so the dashboard stays empty. (Systems made before 1.4.2 start with it
+off: switch it on there.) Leave the other tone settings at their defaults to start.
 
 **4. Point your uploader here.** Every uploader needs three things:
 
@@ -120,8 +121,13 @@ defaults to start.
 | System ID | from step 2 |
 | API key | from step 2 |
 
-RDIO Scanner: add a *Downstream* with those values. SDRTrunk, Trunk Recorder and others: use their
-RDIO-compatible uploader. To test by hand, see [Uploads](uploads.md#examples).
+RDIO Scanner / Thinline Radio: add a *Downstream* with those values. SDRTrunk, Trunk Recorder and others: use
+their RDIO-compatible uploader. To test by hand, see [Uploads](uploads.md#examples).
+
+**One uploader, several systems.** A downstream sends each call with its own system's number. Every number it
+sends needs a system in ECRXN Dispatch with that **System ID**, or those calls get *404 System not found*. Either
+add a system for each (each can use the same API key: on the General tab you can type a custom one), or tick
+only the systems you want in the downstream's settings.
 
 **5. Watch calls arrive.** The **Dashboard** lists every call with tones (**Tone hits**) and refreshes every
 15 seconds. Switch to **Tones without a trigger** to see each tone heard that no trigger covers yet: how often,
@@ -255,9 +261,9 @@ the tray icon's **Settings…** changes the port, alert link address, timezone a
 | Problem | Fix |
 |---|---|
 | Uploader gets `missing_token` (401) | It isn't sending the API key |
-| `missing_system_id` (400) / `system_not_found` (404) | The System ID is missing or doesn't match a system |
+| `missing_system_id` (400) / `system_not_found` (404) | The System ID is missing or doesn't match a system. With several systems in one downstream, only some may fail: add a system for each number it sends ([above](#first-steps)) |
 | `invalid_token` (403) | The API key belongs to a different system |
-| 200 but nothing on the Dashboard | Tone Finder is off, or there were no tones |
+| 200 (or "success") but nothing on the Dashboard | Tone Finder is off on that system, or there were no tones. Calls that match no trigger aren't kept while Tone Finder is off |
 | Calls fail or no audio is saved | Check `log/icad_dispatch.log`. On Linux, ffmpeg may be missing: re-run the installer |
 | Other devices can't open the dashboard | Run the setup again with the firewall option ticked (Linux: open the port) |
 | Alert links point to `localhost` | Set `BASE_URL` in `.env` to an address others can reach |

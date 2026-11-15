@@ -178,9 +178,9 @@ def add_system_default_settings(db: SQLiteDatabase, radio_system_id: int) -> Non
     if not ok["success"]:
         raise RuntimeError(f"upload settings: {ok['message']}")
 
-    # 2) tone settings
+    # 2) tone settings (Tone Finder on, so calls with tones show on the dashboard before any trigger exists)
     ok = db.execute_commit(
-        "INSERT INTO radio_system_tone_settings (radio_system_id) VALUES (?)",
+        "INSERT INTO radio_system_tone_settings (radio_system_id, tone_finder_enabled) VALUES (?, 1)",
         (radio_system_id,),
     )
     if not ok["success"]:
