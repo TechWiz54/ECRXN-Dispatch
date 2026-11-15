@@ -9,7 +9,7 @@
  *********************************************************************/
 (function () {
     "use strict";
-    const KEY = "ecrxnDemoState.v3";
+    const KEY = "ecrxnDemoState.v4";
     const MAX_AGE_S = 3600;                 // start over after an hour
     const clone = o => JSON.parse(JSON.stringify(o));
     const now = () => Math.floor(Date.now() / 1000);
@@ -31,6 +31,7 @@
         (d.unmatched || []).forEach(g => { g.last_epoch += shift; });
         d.groups = d.groups || [];
         d.group_notifiers = d.group_notifiers || {};
+        d.together = d.together || {};
         d.nextId = 1000;
         d.createdAt = now();
         return d;
@@ -58,9 +59,12 @@
     /** A group as the server lists it: trigger count and which of its alerts are on, worked out now */
     function groupRow(g) {
         const chans = (S.group_notifiers[g.alert_trigger_group_id] || {}).channels || {};
-        return { ...g, trigger_count: S.triggers.filter(t => +t.alert_trigger_group_id === +g.alert_trigger_group_id).length,
-                 channels_on: Object.keys(chans).filter(ch => +chans[ch].enabled) };
+        g.trigger_ids = (g.trigger_ids || []).filter(id => trig(id));
+        return { ...g, trigger_count: g.trigger_ids.length, channels_on: Object.keys(chans).filter(ch => +chans[ch].enabled) };
     }
+    const sysGroups = sid => S.groups.filter(g => +g.radio_system_id === +sid)
+        .sort((a, b) => (a.sort_order - b.sort_order) || a.group_name.localeCompare(b.group_name));
+    const togetherOf = sid => (S.together[sid] = S.together[sid] || { together_mode: "top", channel_modes: {}, combined_background: null });
 
     function groupsApi(method, sid, grest, body) {
         let m;
@@ -71,15 +75,29 @@
             if (method === "POST") {
                 if (!name) return fail("Enter a name for the group.");
                 if (taken(0)) return fail(`There's already a group called “${name}”.`);
-                const g = { alert_trigger_group_id: nextId(), radio_system_id: sid, group_name: name,
-                            group_color: String(body.group_color || "#6C757D").toUpperCase() };
+                const g = { alert_trigger_group_id: nextId(), radio_system_id: sid, group_name: name, trigger_ids: [],
+                            group_color: String(body.group_color || "#6C757D").toUpperCase(), sort_order: sysGroups(sid).length };
                 S.groups.push(g);
                 S.group_notifiers[g.alert_trigger_group_id] = clone(S.blank_group_notifiers);
                 return ok(groupRow(g), "Group added.");
             }
-            return ok(S.groups.filter(g => +g.radio_system_id === sid).map(groupRow)
-                .sort((a, b) => a.group_name.localeCompare(b.group_name)));
+            return ok(sysGroups(sid).map(groupRow));
         }
+        if (grest === "/order") {
+            const ids = (body.group_ids || []).map(Number);
+            sysGroups(sid).forEach(g => { const k = ids.indexOf(+g.alert_trigger_group_id); g.sort_order = k < 0 ? 999 : k; });
+            sysGroups(sid).forEach((g, k) => { g.sort_order = k; });
+            return ok(sysGroups(sid).map(groupRow), "Order saved.");
+        }
+        if (grest === "/together") {
+            const t = togetherOf(sid);
+            if (method !== "GET") {
+                t.together_mode = body.together_mode || t.together_mode;
+                t.channel_modes = Object.fromEntries(Object.entries(body.channel_modes || {}).filter(([, v]) => v && v !== t.together_mode));
+            }
+            return ok(t, method === "GET" ? "OK" : "Saved.");
+        }
+        if (/^\/together\/(background|preview)$/.test(grest)) return method === "GET" ? fail("No background.", 404) : fail("Uploads are turned off in the demo.");
         if (!(m = grest.match(/^\/(\d+)(\/.*)?$/))) return fail("Not available in the demo.", 404);
         const g = group(m[1]), gr = m[2] || "";
         if (!g || +g.radio_system_id !== sid) return fail("Group not found for this system.", 404);
@@ -88,13 +106,20 @@
             if (method === "DELETE") {
                 S.groups = S.groups.filter(x => x !== g);
                 delete S.group_notifiers[g.alert_trigger_group_id];
-                S.triggers.forEach(t => { if (+t.alert_trigger_group_id === +g.alert_trigger_group_id) t.alert_trigger_group_id = null; });
-                return ok(null, "Group deleted. Its triggers are kept, without a group.");
+                return ok(null, "Group deleted. Its triggers are kept.");
             }
             if (!name) return fail("Enter a name for the group.");
             if (taken(g.alert_trigger_group_id)) return fail(`There's already a group called “${name}”.`);
             Object.assign(g, { group_name: name, group_color: String(body.group_color || g.group_color).toUpperCase() });
             return ok(groupRow(g), "Group saved.");
+        }
+        if ((m = gr.match(/^\/members\/(\d+)$/))) {
+            const tid = +m[1];
+            if (!trig(tid)) return fail("Trigger not found for this system.", 404);
+            g.trigger_ids = (g.trigger_ids || []).filter(x => +x !== tid);
+            if (method === "PUT") g.trigger_ids.push(tid);
+            return ok({ group_ids: sysGroups(sid).filter(x => (x.trigger_ids || []).includes(tid)).map(x => x.alert_trigger_group_id) },
+                method === "PUT" ? "Added to the group." : "Taken out of the group.");
         }
         if (gr === "/notifiers") return ok({ ...n, group: groupRow(g) });
         if (/^\/notifiers\/[a-z0-9]+\/test$/.test(gr)) return ok([], DEMO_SENT);
@@ -107,32 +132,6 @@
             return ok(ch, "Saved.");
         }
         return fail("Not available in the demo.", 404);
-    }
-
-    /** Merge form keys like "telegram_bot_token" / "smtp_hostname" into a settings object */
-    function mergeSection(obj, section, body) {
-        const prefix = section + "_";
-        for (const [k, v] of Object.entries(clean(body))) {
-            if (k === "radio_system_id" || k === "system_name") continue;
-            if (k in obj) obj[k] = v;
-            else if (k === prefix + "enabled" || k === "enabled") obj.enabled = +v ? 1 : 0;
-            else if (k.startsWith(prefix) && k.slice(prefix.length) in obj) obj[k.slice(prefix.length)] = v;
-            else obj[k.startsWith(prefix) ? k.slice(prefix.length) : k] = v;
-        }
-        return obj;
-    }
-
-    function listOps(list, idKey, body, id, method) {
-        if (method === "DELETE") {
-            const i = list.findIndex(x => +x[idKey] === +id);
-            if (i >= 0) list.splice(i, 1);
-            return ok([], "Deleted.");
-        }
-        const row = id ? list.find(x => +x[idKey] === +id) : null;
-        const data = clean(body);
-        if (row) Object.assign(row, data);
-        else list.push({ ...data, [idKey]: nextId(), sort_order: list.length, field_enabled: data.field_enabled ?? 1, enabled: data.enabled ?? 1 });
-        return ok(row || list[list.length - 1], "Saved.");
     }
 
     function tonesCsv(sid) {
@@ -300,8 +299,8 @@
                             dtmf_sequences: [], last_fired_at: null, ...clean(body), alert_trigger_id: id, radio_system_id: sid };
                 S.triggers.push(t);
                 S.notifiers[id] = clone(S.blankNotifiers);
-                // new triggers: only in the system's Pushover alert, like a real server
-                Object.keys(S.notifiers[id].system_includes || {}).forEach(k => { S.notifiers[id].system_includes[k] = k === "pushover" ? 1 : 0; });
+                // new triggers: in the system's alert on every notifier, like a real server
+                Object.keys(S.notifiers[id].system_includes || {}).forEach(k => { S.notifiers[id].system_includes[k] = 1; });
                 return { status: 201, body: { success: true, message: `Trigger '${t.alert_trigger_name || ""}' created.`, result: { alert_trigger_id: id } } };
             }
             let list = S.triggers.filter(t => +t.radio_system_id === sid);
@@ -335,17 +334,18 @@
             if (method !== "GET") Object.assign(S.pushover[tid], clean(body));
             return ok(S.pushover[tid], "Pushover settings updated.");
         }
-        if (trest === "/group") {
-            const gid = +body.alert_trigger_group_id || null;
-            const g = gid && group(gid);
-            if (gid && (!g || +g.radio_system_id !== sid)) return fail("That group isn't on this system.");
-            t.alert_trigger_group_id = gid;
-            return ok({ alert_trigger_group_id: gid }, "Group changed.");
+        if (trest === "/groups") {
+            const want = (body.group_ids || []).map(Number);
+            sysGroups(sid).forEach(g => {
+                g.trigger_ids = (g.trigger_ids || []).filter(x => +x !== tid);
+                if (want.includes(+g.alert_trigger_group_id)) g.trigger_ids.push(tid);
+            });
+            return ok({ group_ids: want }, "Groups changed.");
         }
         const n = S.notifiers[tid] = S.notifiers[tid] || clone(S.blankNotifiers);
         if (trest === "/notifiers") {
-            const g = t.alert_trigger_group_id && group(t.alert_trigger_group_id);
-            return ok({ ...n, group: g ? { ...groupRow(g), facebook_background: null } : null });
+            const mine = sysGroups(sid).filter(g => (g.trigger_ids || []).includes(tid));
+            return ok({ ...n, groups: mine.map(g => ({ ...groupRow(g), facebook_background: null })) });
         }
         if ((m = trest.match(/^\/notifiers\/([a-z0-9]+)\/system$/))) {
             n.system_includes[m[1]] = +body.include ? 1 : 0;

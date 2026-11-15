@@ -3,13 +3,18 @@
 Trigger groups and their notifiers. Routes are attached to the /api/systems blueprint:
 
   /api/systems/<sys>/trigger-groups                                   GET | POST
+  /api/systems/<sys>/trigger-groups/order                             PUT   {group_ids: [top first]}
+  /api/systems/<sys>/trigger-groups/together                          GET | PUT  (several groups firing at once)
+  /api/systems/<sys>/trigger-groups/together/background               GET | POST | DELETE  ("several groups" image)
+  /api/systems/<sys>/trigger-groups/together/preview                  POST
   /api/systems/<sys>/trigger-groups/<gid>                             PATCH | DELETE
+  /api/systems/<sys>/trigger-groups/<gid>/members/<trigger id>        PUT (add) | DELETE (take out)
   /api/systems/<sys>/trigger-groups/<gid>/notifiers                   GET
   /api/systems/<sys>/trigger-groups/<gid>/notifiers/<channel>         PUT
   /api/systems/<sys>/trigger-groups/<gid>/notifiers/<channel>/test    POST
   /api/systems/<sys>/trigger-groups/<gid>/facebook/background         GET | POST | DELETE
   /api/systems/<sys>/trigger-groups/<gid>/facebook/preview            POST
-  /api/systems/<sys>/triggers/<id>/group                              PUT   {alert_trigger_group_id}
+  /api/systems/<sys>/triggers/<id>/groups                             PUT   {group_ids: [...]}
 """
 from __future__ import annotations
 
@@ -19,8 +24,9 @@ from flask import abort, current_app, jsonify, request
 
 from lib.facebook_module import remove_background
 from lib.trigger_group_module import (
-    add_group, delete_group, get_group, get_group_notifiers, get_groups, group_context, save_group_notifier,
-    set_group_facebook_background, set_trigger_group, update_group,
+    add_group, delete_group, get_group, get_group_notifiers, get_groups, get_together, group_context, reorder_groups,
+    save_group_notifier, save_together, set_combined_background, set_group_facebook_background, set_member,
+    set_trigger_groups, update_group,
 )
 from lib.trigger_notifier_module import GROUP_CHANNELS, clean_channel_config, fill_template_defaults, send_channel
 from routes.api.systems import api_systems
@@ -39,6 +45,11 @@ def _group_or_404(db, radio_system_id: int, group_id: int) -> dict:
     return g
 
 
+def _together_out(db, radio_system_id: int) -> dict:
+    t = get_together(db, radio_system_id)
+    return dict(t, combined_background=_bg_info(t.get("combined_background")))
+
+
 @api_systems.route("/<int:radio_system_id>/trigger-groups", methods=["GET", "POST"])
 @login_required
 @csrf_protect
@@ -49,6 +60,56 @@ def trigger_groups_collection(radio_system_id: int):
         return jsonify(success=True, message="OK", result=get_groups(db, radio_system_id)), 200
     res = add_group(db, radio_system_id, _body())
     return jsonify(res), (200 if res["success"] else 400)
+
+
+@api_systems.route("/<int:radio_system_id>/trigger-groups/order", methods=["PUT", "PATCH"])
+@login_required
+@csrf_protect
+def trigger_groups_order(radio_system_id: int):
+    db = current_app.config["db"]
+    _system_or_404(db, radio_system_id)
+    res = reorder_groups(db, radio_system_id, _body().get("group_ids") or [])
+    return jsonify(res), 200
+
+
+@api_systems.route("/<int:radio_system_id>/trigger-groups/together", methods=["GET", "PUT", "PATCH"])
+@login_required
+@csrf_protect
+def trigger_groups_together(radio_system_id: int):
+    db = current_app.config["db"]
+    _system_or_404(db, radio_system_id)
+    if request.method != "GET":
+        res = save_together(db, radio_system_id, _body())
+        if not res["success"]:
+            return jsonify(res), 400
+    return jsonify(success=True, message="Saved." if request.method != "GET" else "OK",
+                   result=_together_out(db, radio_system_id)), 200
+
+
+@api_systems.route("/<int:radio_system_id>/trigger-groups/together/background", methods=["GET", "POST", "DELETE"])
+@login_required
+@csrf_protect
+def trigger_groups_together_background(radio_system_id: int):
+    db = current_app.config["db"]
+    _system_or_404(db, radio_system_id)
+    current = get_together(db, radio_system_id).get("combined_background")
+    if request.method == "GET":
+        return _bg_file(current)
+    if request.method == "DELETE":
+        remove_background(f"groups_{radio_system_id}")
+        set_combined_background(db, radio_system_id, None)
+        return jsonify(success=True, message="Background removed.", result=None), 200
+    return _bg_upload(f"groups_{radio_system_id}", lambda name: set_combined_background(db, radio_system_id, name))
+
+
+@api_systems.route("/<int:radio_system_id>/trigger-groups/together/preview", methods=["POST"])
+@login_required
+@csrf_protect
+def trigger_groups_together_preview(radio_system_id: int):
+    db = current_app.config["db"]
+    system = _system_or_404(db, radio_system_id)
+    return _preview(system, get_together(db, radio_system_id).get("combined_background")
+                    or (system.get("facebook") or {}).get("background"))
 
 
 @api_systems.route("/<int:radio_system_id>/trigger-groups/<int:group_id>", methods=["PATCH", "DELETE"])
@@ -62,13 +123,25 @@ def trigger_group_item(radio_system_id: int, group_id: int):
     return jsonify(res), (200 if res["success"] else 400)
 
 
-@api_systems.route("/<int:radio_system_id>/triggers/<int:alert_trigger_id>/group", methods=["PUT", "PATCH"])
+@api_systems.route("/<int:radio_system_id>/trigger-groups/<int:group_id>/members/<int:alert_trigger_id>",
+                   methods=["PUT", "DELETE"])
 @login_required
 @csrf_protect
-def trigger_set_group(radio_system_id: int, alert_trigger_id: int):
+def trigger_group_member(radio_system_id: int, group_id: int, alert_trigger_id: int):
+    db = current_app.config["db"]
+    _group_or_404(db, radio_system_id, group_id)
+    _trigger_or_404(db, radio_system_id, alert_trigger_id)
+    res = set_member(db, radio_system_id, group_id, alert_trigger_id, request.method == "PUT")
+    return jsonify(res), (200 if res["success"] else 400)
+
+
+@api_systems.route("/<int:radio_system_id>/triggers/<int:alert_trigger_id>/groups", methods=["PUT", "PATCH"])
+@login_required
+@csrf_protect
+def trigger_set_groups(radio_system_id: int, alert_trigger_id: int):
     db = current_app.config["db"]
     _trigger_or_404(db, radio_system_id, alert_trigger_id)
-    res = set_trigger_group(db, radio_system_id, alert_trigger_id, _body().get("alert_trigger_group_id"))
+    res = set_trigger_groups(db, radio_system_id, alert_trigger_id, _body().get("group_ids") or [])
     return jsonify(res), (200 if res["success"] else 400)
 
 

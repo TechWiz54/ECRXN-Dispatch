@@ -1,12 +1,16 @@
 # lib/trigger_group_module.py
 """
-Trigger groups: a system's triggers can be grouped (e.g. "Fire", "EMS"), and each group can send its own
-alert on Telegram, Discord, Make, Pushover, Email, n8n and Facebook (each with its own Facebook background).
+Trigger groups: a system's triggers can be grouped (e.g. "Fire", "EMS"; a trigger can be in several), and each
+group can send its own alert on Telegram, Discord, Make, Pushover, Email, n8n and Facebook (each group with its
+own Facebook background).
 
-When triggers fire, each group sends one alert per channel naming the group's fired triggers in
-{trigger_list} (and the group in {group_name}). A trigger with its own alert on a channel is left out of
-its group's alert on that channel, and its blank settings are filled from the group's.
-The system's own alerts are separate and unchanged.
+When triggers fire, each group with fired triggers sends one alert per channel naming them in {trigger_list}
+(and the group in {group_name}). A trigger with its own alert on a channel is left out of its groups' alerts on
+that channel, and its blank settings are filled from its groups'. The system's own alerts are separate.
+
+Groups have an order. When several groups fire on one call, the system's "together" setting decides, per
+channel: each group sends its own ('separate'), one alert with the top group's settings naming every fired
+trigger ('top'), or that with the system's "several groups" Facebook background ('image').
 
 Settings are stored in alert_trigger_group_notifiers like trigger notifiers (one JSON object per channel).
 """
@@ -29,6 +33,8 @@ module_logger = logging.getLogger("icad_dispatch.trigger_group_module")
 MAX_NAME = 60
 DEFAULT_COLOR = "#6C757D"
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+TOGETHER_MODES = ("separate", "top", "image")
+DEFAULT_TOGETHER = "top"
 
 
 def _ok(result: Any = None, message: str = "OK") -> Dict[str, Any]:
@@ -45,34 +51,55 @@ def _blank_group(channel: str) -> Dict[str, Any]:
     return _blank(channel)
 
 
+def _order_key(g: Dict[str, Any]):
+    return int(g.get("sort_order") or 0), str(g.get("group_name") or "").lower()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Groups
 # ─────────────────────────────────────────────────────────────────────────────
 def get_groups(db, radio_system_id: int) -> List[Dict[str, Any]]:
-    """The system's groups by name, each with trigger_count and the channels whose alert is on."""
+    """The system's groups, top first, each with trigger_ids, trigger_count and the channels whose alert is on."""
     res = db.execute_query(
-        """
-        SELECT g.alert_trigger_group_id, g.radio_system_id, g.group_name, g.group_color,
-               (SELECT COUNT(*) FROM alert_triggers t WHERE t.alert_trigger_group_id = g.alert_trigger_group_id)
-                   AS trigger_count
-        FROM alert_trigger_groups g
-        WHERE g.radio_system_id = ?
-        ORDER BY g.group_name COLLATE NOCASE
-        """,
+        "SELECT alert_trigger_group_id, radio_system_id, group_name, group_color, sort_order "
+        "FROM alert_trigger_groups WHERE radio_system_id = ?",
         (int(radio_system_id),), fetch_mode="all",
     )
-    groups = (res.get("result") or []) if res.get("success") else []
+    groups = sorted((res.get("result") or []) if res.get("success") else [], key=_order_key)
     if not groups:
         return []
-    on = get_group_notifiers(db, [g["alert_trigger_group_id"] for g in groups])
+    ids = [int(g["alert_trigger_group_id"]) for g in groups]
+    members = _members(db, ids)
+    on = get_group_notifiers(db, ids)
     for g in groups:
-        chans = on.get(int(g["alert_trigger_group_id"])) or {}
-        g["channels_on"] = [c for c in GROUP_CHANNELS if int((chans.get(c) or {}).get("enabled") or 0)]
+        gid = int(g["alert_trigger_group_id"])
+        g["trigger_ids"] = members.get(gid, [])
+        g["trigger_count"] = len(g["trigger_ids"])
+        g["channels_on"] = [c for c in GROUP_CHANNELS if int(((on.get(gid) or {}).get(c) or {}).get("enabled") or 0)]
     return groups
+
+
+def _members(db, group_ids: List[int]) -> Dict[int, List[int]]:
+    if not group_ids:
+        return {}
+    res = db.execute_query(
+        f"SELECT alert_trigger_group_id, alert_trigger_id FROM alert_trigger_group_members "
+        f"WHERE alert_trigger_group_id IN ({','.join('?' for _ in group_ids)}) ORDER BY alert_trigger_id",
+        list(group_ids), fetch_mode="all",
+    )
+    out: Dict[int, List[int]] = {}
+    for r in (res.get("result") or []) if res.get("success") else []:
+        out.setdefault(int(r["alert_trigger_group_id"]), []).append(int(r["alert_trigger_id"]))
+    return out
 
 
 def get_group(db, radio_system_id: int, group_id: int) -> Optional[Dict[str, Any]]:
     return next((g for g in get_groups(db, radio_system_id) if int(g["alert_trigger_group_id"]) == int(group_id)), None)
+
+
+def groups_of_trigger(db, radio_system_id: int, alert_trigger_id: int) -> List[Dict[str, Any]]:
+    """The trigger's groups, top first."""
+    return [g for g in get_groups(db, radio_system_id) if int(alert_trigger_id) in g["trigger_ids"]]
 
 
 def _clean_group(data: Dict[str, Any]) -> tuple:
@@ -98,14 +125,19 @@ def _name_taken(db, radio_system_id: int, name: str, except_id: Optional[int] = 
 
 
 def add_group(db, radio_system_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Add a group at the bottom of the order."""
     name, color, err = _clean_group(data)
     if err:
         return _err(err)
     if _name_taken(db, radio_system_id, name):
         return _err(f"There's already a group called “{name}”.")
+    last = db.execute_query("SELECT COALESCE(MAX(sort_order), -1) AS m FROM alert_trigger_groups WHERE radio_system_id = ?",
+                            (int(radio_system_id),), fetch_mode="one")
+    top = (last.get("result") or {}).get("m") if last.get("success") else None
+    order = (int(top) if top is not None else -1) + 1
     res = db.execute_commit(
-        "INSERT INTO alert_trigger_groups (radio_system_id, group_name, group_color) VALUES (?, ?, ?)",
-        (int(radio_system_id), name, color), return_row_id=True,
+        "INSERT INTO alert_trigger_groups (radio_system_id, group_name, group_color, sort_order) VALUES (?, ?, ?, ?)",
+        (int(radio_system_id), name, color, order), return_row_id=True,
     )
     if not res.get("success"):
         return _err(res.get("message") or "Couldn't add the group.")
@@ -128,27 +160,111 @@ def update_group(db, radio_system_id: int, group_id: int, data: Dict[str, Any]) 
 
 
 def delete_group(db, radio_system_id: int, group_id: int) -> Dict[str, Any]:
-    """Delete a group; its triggers stay, just without a group."""
-    db.execute_commit("UPDATE alert_triggers SET alert_trigger_group_id = NULL WHERE alert_trigger_group_id = ?",
-                      (int(group_id),))
+    """Delete a group; its triggers stay (in their other groups, if any)."""
     res = db.execute_commit("DELETE FROM alert_trigger_groups WHERE alert_trigger_group_id = ? AND radio_system_id = ?",
                             (int(group_id), int(radio_system_id)))
     if not res.get("success"):
         return _err(res.get("message") or "Couldn't delete the group.")
     remove_background(f"group_{int(group_id)}")
-    return _ok(None, "Group deleted. Its triggers are kept, without a group.")
+    return _ok(None, "Group deleted. Its triggers are kept.")
 
 
-def set_trigger_group(db, radio_system_id: int, alert_trigger_id: int, group_id: Any) -> Dict[str, Any]:
-    """Put a trigger in one of its system's groups, or in none (group_id blank / 0)."""
-    gid = int(group_id) if str(group_id or "").strip().isdigit() and int(group_id) > 0 else None
-    if gid is not None and not get_group(db, radio_system_id, gid):
+def reorder_groups(db, radio_system_id: int, group_ids: List[Any]) -> Dict[str, Any]:
+    """Save the order (top first). Groups left out keep their place after the listed ones."""
+    have = [int(g["alert_trigger_group_id"]) for g in get_groups(db, radio_system_id)]
+    wanted = [int(i) for i in group_ids or [] if str(i).strip().isdigit() and int(i) in have]
+    order = list(dict.fromkeys(wanted)) + [i for i in have if i not in wanted]
+    for pos, gid in enumerate(order):
+        db.execute_commit("UPDATE alert_trigger_groups SET sort_order = ? WHERE alert_trigger_group_id = ?", (pos, gid))
+    return _ok(get_groups(db, radio_system_id), "Order saved.")
+
+
+def set_member(db, radio_system_id: int, group_id: int, alert_trigger_id: int, member: bool) -> Dict[str, Any]:
+    """Put a trigger in a group, or take it out (its other groups are unchanged)."""
+    if not get_group(db, radio_system_id, group_id):
         return _err("That group isn't on this system.")
-    res = db.execute_commit("UPDATE alert_triggers SET alert_trigger_group_id = ? WHERE alert_trigger_id = ? AND radio_system_id = ?",
-                            (gid, int(alert_trigger_id), int(radio_system_id)))
+    if member:
+        res = db.execute_commit("INSERT OR IGNORE INTO alert_trigger_group_members (alert_trigger_group_id, alert_trigger_id) "
+                                "VALUES (?, ?)", (int(group_id), int(alert_trigger_id)))
+    else:
+        res = db.execute_commit("DELETE FROM alert_trigger_group_members WHERE alert_trigger_group_id = ? AND alert_trigger_id = ?",
+                                (int(group_id), int(alert_trigger_id)))
     if not res.get("success"):
         return _err(res.get("message") or "Couldn't change the group.")
-    return _ok({"alert_trigger_group_id": gid}, "Group changed.")
+    return _ok({"group_ids": [g["alert_trigger_group_id"] for g in groups_of_trigger(db, radio_system_id, alert_trigger_id)]},
+               "Added to the group." if member else "Taken out of the group.")
+
+
+def set_trigger_groups(db, radio_system_id: int, alert_trigger_id: int, group_ids: List[Any]) -> Dict[str, Any]:
+    """Make the trigger's groups exactly these (any of this system's groups; others are ignored)."""
+    have = {int(g["alert_trigger_group_id"]) for g in get_groups(db, radio_system_id)}
+    wanted = {int(i) for i in group_ids or [] if str(i).strip().isdigit()}
+    if wanted - have:
+        return _err("That group isn't on this system.")
+    for gid in have:
+        set_member(db, radio_system_id, gid, alert_trigger_id, gid in wanted)
+    return _ok({"group_ids": [g["alert_trigger_group_id"] for g in groups_of_trigger(db, radio_system_id, alert_trigger_id)]},
+               "Groups changed.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# When several groups fire together (per system)
+# ─────────────────────────────────────────────────────────────────────────────
+def get_together(db, radio_system_id: int) -> Dict[str, Any]:
+    """{"together_mode", "channel_modes": {ch: mode}, "combined_background"} with defaults filled in."""
+    res = db.execute_query("SELECT * FROM radio_system_group_settings WHERE radio_system_id = ?",
+                           (int(radio_system_id),), fetch_mode="one")
+    row = (res.get("result") or {}) if res.get("success") else {}
+    try:
+        modes = json.loads(row.get("channel_modes") or "{}") or {}
+    except ValueError:
+        modes = {}
+    mode = row.get("together_mode") if row.get("together_mode") in TOGETHER_MODES else DEFAULT_TOGETHER
+    return {"together_mode": mode,
+            "channel_modes": {c: m for c, m in modes.items() if c in GROUP_CHANNELS and m in TOGETHER_MODES},
+            "combined_background": row.get("combined_background") or None}
+
+
+def _write_together(db, radio_system_id: int, mode: str, modes: Dict[str, str], background: Optional[str]):
+    return db.execute_commit(
+        """
+        INSERT INTO radio_system_group_settings (radio_system_id, together_mode, channel_modes, combined_background)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(radio_system_id) DO UPDATE SET
+            together_mode = excluded.together_mode, channel_modes = excluded.channel_modes,
+            combined_background = excluded.combined_background
+        """,
+        (int(radio_system_id), mode, json.dumps(modes), background),
+    )
+
+
+def save_together(db, radio_system_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    cur = get_together(db, radio_system_id)
+    mode = str((data or {}).get("together_mode") or cur["together_mode"])
+    if mode not in TOGETHER_MODES:
+        return _err("Choose what happens when several groups fire together.")
+    raw = (data or {}).get("channel_modes")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw or "{}")
+        except ValueError:
+            raw = {}
+    modes = cur["channel_modes"] if raw is None else {
+        c: m for c, m in (raw or {}).items() if c in GROUP_CHANNELS and m in TOGETHER_MODES and m != mode}
+    res = _write_together(db, radio_system_id, mode, modes, cur["combined_background"])
+    if not res.get("success"):
+        return _err(res.get("message") or "Couldn't save.")
+    return _ok(get_together(db, radio_system_id), "Saved.")
+
+
+def set_combined_background(db, radio_system_id: int, name: Optional[str]) -> Dict[str, Any]:
+    cur = get_together(db, radio_system_id)
+    res = _write_together(db, radio_system_id, cur["together_mode"], cur["channel_modes"], name or None)
+    return {"success": bool(res.get("success")), "message": res.get("message") or "Saved.", "result": []}
+
+
+def mode_for(together: Dict[str, Any], channel: str) -> str:
+    return (together.get("channel_modes") or {}).get(channel) or together.get("together_mode") or DEFAULT_TOGETHER
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,68 +334,109 @@ def set_group_facebook_background(db, group_id: int, name: Optional[str]) -> Dic
 
 
 def groups_for_triggers(db, fired_trigger_data: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
-    """{group id: {"group": row, "channels": {...}}} for the groups the fired triggers are in."""
-    gids = sorted({int(t["alert_trigger_group_id"]) for t in fired_trigger_data or [] if t.get("alert_trigger_group_id")})
-    if not gids:
+    """{group id: {"group": row, "channels": {...}, "member_ids": {fired trigger ids in it}}} for the groups
+    the fired triggers are in."""
+    tids = sorted({int(t["alert_trigger_id"]) for t in fired_trigger_data or [] if t.get("alert_trigger_id") is not None})
+    if not tids:
         return {}
     res = db.execute_query(
-        f"SELECT * FROM alert_trigger_groups WHERE alert_trigger_group_id IN ({','.join('?' for _ in gids)})",
-        gids, fetch_mode="all",
+        f"SELECT g.*, m.alert_trigger_id FROM alert_trigger_group_members m "
+        f"JOIN alert_trigger_groups g ON g.alert_trigger_group_id = m.alert_trigger_group_id "
+        f"WHERE m.alert_trigger_id IN ({','.join('?' for _ in tids)})",
+        tids, fetch_mode="all",
     )
-    rows = {int(r["alert_trigger_group_id"]): r for r in (res.get("result") or [])} if res.get("success") else {}
-    chans = get_group_notifiers(db, list(rows))
-    return {gid: {"group": row, "channels": chans.get(gid) or {}} for gid, row in rows.items()}
+    out: Dict[int, Dict[str, Any]] = {}
+    for r in (res.get("result") or []) if res.get("success") else []:
+        gid = int(r["alert_trigger_group_id"])
+        g = out.setdefault(gid, {"group": {k: v for k, v in r.items() if k != "alert_trigger_id"}, "member_ids": set()})
+        g["member_ids"].add(int(r["alert_trigger_id"]))
+    chans = get_group_notifiers(db, list(out))
+    for gid, g in out.items():
+        g["channels"] = chans.get(gid) or {}
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sending
 # ─────────────────────────────────────────────────────────────────────────────
-def group_context(system_row: Dict[str, Any], payload: Dict[str, Any], group: Dict[str, Any],
+def group_context(system_row: Dict[str, Any], payload: Dict[str, Any], groups: Any,
                   members: List[Dict[str, Any]], *, detect_result: Any = None, transcript_text: Optional[str] = None,
                   transcript_segments: Optional[list] = None, tz: str) -> Dict[str, Any]:
-    """Placeholder context for a group's alert: {trigger_list} names its fired triggers, {group_name} the group."""
+    """Placeholder context for a group alert: {trigger_list} names the fired triggers, {group_name} the group
+    (several groups' names when one alert covers them)."""
+    groups = groups if isinstance(groups, list) else [groups]
     row = dict(system_row)
     stream = next((t.get("alert_trigger_stream_url") for t in members if t.get("alert_trigger_stream_url")), None)
     if stream:
         row["stream_url"] = stream
     ctx = build_context(row, payload, members, detect_result=detect_result, transcript_text=transcript_text,
                         transcript_segments=transcript_segments, tz=tz)
-    ctx["group_name"] = group.get("group_name") or ""
+    ctx["group_name"] = ", ".join(str(g.get("group_name") or "") for g in groups)
     ctx.setdefault("trigger_name", ", ".join(str(t.get("alert_trigger_name") or "") for t in members))
     return ctx
 
 
 def _has_own(trigger: Dict[str, Any], channel: str, own: Dict[str, Dict[str, Any]]) -> bool:
-    """Does this trigger send its own alert on this channel (so it's left out of its group's)?"""
+    """Does this trigger send its own alert on this channel (so it's left out of its groups')?"""
     if channel == "pushover":
         return bool(int(trigger.get("enable_pushover") or 0) and trigger.get("pushover_group_token")
                     and trigger.get("pushover_app_token"))
     return bool(int((own.get(channel) or {}).get("enabled") or 0))
 
 
+def plan_group_alerts(fired_trigger_data: List[Dict[str, Any]], groups: Dict[int, Dict[str, Any]],
+                      own_all: Dict[int, Dict[str, Dict[str, Any]]], together: Dict[str, Any],
+                      combined_background: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    The group alerts to send for one call: [{"channel", "groups": [rows, top first], "members": [triggers],
+    "cfg": settings}]. Each group with this channel on and fired triggers (that don't send their own) counts;
+    when several do, the channel's together mode decides between one alert each and one for all.
+    """
+    plan: List[Dict[str, Any]] = []
+    ordered = sorted(groups.values(), key=lambda g: _order_key(g["group"]))
+    for ch in GROUP_CHANNELS:
+        active = []
+        for g in ordered:
+            cfg = (g.get("channels") or {}).get(ch) or {}
+            if not int(cfg.get("enabled") or 0):
+                continue
+            subset = [t for t in fired_trigger_data
+                      if int(t["alert_trigger_id"]) in g["member_ids"]
+                      and not _has_own(t, ch, own_all.get(int(t["alert_trigger_id"])) or {})]
+            if subset:
+                active.append((g, cfg, subset))
+            else:
+                module_logger.info("Group '%s' %s: every fired trigger sends its own; skipping", g["group"].get("group_name"), ch)
+        if not active:
+            continue
+        mode = mode_for(together, ch)
+        if len(active) == 1 or mode == "separate":
+            plan += [{"channel": ch, "groups": [g["group"]], "members": subset, "cfg": cfg} for g, cfg, subset in active]
+            continue
+        # one alert for all of them: the top group's settings, every fired trigger once (in firing order)
+        top_cfg = dict(active[0][1])
+        ids = {int(t["alert_trigger_id"]) for _g, _c, sub in active for t in sub}
+        members = [t for t in fired_trigger_data if int(t["alert_trigger_id"]) in ids]
+        if ch == "facebook" and mode == "image" and combined_background:
+            top_cfg["background"] = combined_background
+        plan.append({"channel": ch, "groups": [g["group"] for g, _c, _s in active], "members": members, "cfg": top_cfg})
+    return plan
+
+
 def dispatch_group_notifiers(db, system_row: Dict[str, Any], payload: Dict[str, Any],
                              fired_trigger_data: List[Dict[str, Any]], *, groups: Dict[int, Dict[str, Any]],
                              detect_result: Any = None, transcript_text: Optional[str] = None,
                              transcript_segments: Optional[list] = None, tz: str) -> int:
-    """One alert per group and channel for the fired triggers in each group. Returns how many were sent."""
+    """Send the group alerts for the fired triggers. Returns how many were sent."""
     if not groups:
         return 0
     own_all = get_notifiers_for_triggers(db, [int(t["alert_trigger_id"]) for t in fired_trigger_data])
+    together = get_together(db, system_row.get("radio_system_id"))
     sent = 0
-    for gid, g in groups.items():
-        members = [t for t in fired_trigger_data if int(t.get("alert_trigger_group_id") or 0) == gid]
-        for ch in GROUP_CHANNELS:
-            cfg = (g.get("channels") or {}).get(ch) or {}
-            if not int(cfg.get("enabled") or 0):
-                continue
-            subset = [t for t in members if not _has_own(t, ch, own_all.get(int(t["alert_trigger_id"])) or {})]
-            if not subset:
-                module_logger.info("Group '%s' %s: every fired trigger sends its own; skipping",
-                                   g["group"].get("group_name"), ch)
-                continue
-            ctx = group_context(system_row, payload, g["group"], subset, detect_result=detect_result,
-                                transcript_text=transcript_text, transcript_segments=transcript_segments, tz=tz)
-            ok, msg = send_channel(ch, cfg, system_row, ctx)
-            module_logger.info("Group '%s' %s: %s", g["group"].get("group_name"), ch, msg)
-            sent += int(ok)
+    for item in plan_group_alerts(fired_trigger_data, groups, own_all, together, together.get("combined_background")):
+        ctx = group_context(system_row, payload, item["groups"], item["members"], detect_result=detect_result,
+                            transcript_text=transcript_text, transcript_segments=transcript_segments, tz=tz)
+        ok, msg = send_channel(item["channel"], item["cfg"], system_row, ctx)
+        module_logger.info("Group '%s' %s: %s", ctx["group_name"], item["channel"], msg)
+        sent += int(ok)
     return sent

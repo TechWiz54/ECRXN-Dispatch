@@ -118,8 +118,8 @@ def main():
     api("DELETE", f"/api/systems/{sid}/trigger-groups/{blank_gid}")
     fire = api("POST", f"/api/systems/{sid}/trigger-groups", {"group_name": "Fire", "group_color": "#D9534F"})["result"]
     ems = api("POST", f"/api/systems/{sid}/trigger-groups", {"group_name": "EMS", "group_color": "#0D6EFD"})["result"]
-    for tid, g in ((tids[0], fire), (tids[2], fire), (tids[1], ems)):
-        api("PUT", f"/api/systems/{sid}/triggers/{tid}/group", {"alert_trigger_group_id": g["alert_trigger_group_id"]})
+    for tid, g in ((tids[0], fire), (tids[2], fire), (tids[1], ems), (tids[2], ems)):   # Station 12 Rescue: both
+        api("PUT", f"/api/systems/{sid}/trigger-groups/{g['alert_trigger_group_id']}/members/{tid}")
     api("PUT", f"/api/systems/{sid}/trigger-groups/{fire['alert_trigger_group_id']}/notifiers/facebook",
         {"enabled": 1, "page_id": "100000000000002", "post_type": "video",
          "message_body": "{group_name} Dispatch Alert: {trigger_list} at {timestamp_24}\n\n{transcript}"})
@@ -157,6 +157,7 @@ def main():
     data["group_notifiers"] = {g["alert_trigger_group_id"]: c.get(
         f"/api/systems/{sid}/trigger-groups/{g['alert_trigger_group_id']}/notifiers").get_json()["result"] for g in data["groups"]}
     data["blank_group_notifiers"] = blank_group_notifiers
+    data["together"] = {sid: c.get(f"/api/systems/{sid}/trigger-groups/together").get_json()["result"]}
     data["unmatched"] = c.get(f"/api/tone-finder/unmatched?radio_system_id={sid}&days=365").get_json()["result"]
     calls = c.get(f"/api/tone-finder/calls?radio_system_id={sid}&limit=100").get_json()
     data["calls"] = calls

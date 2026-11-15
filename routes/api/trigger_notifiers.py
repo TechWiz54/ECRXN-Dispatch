@@ -69,12 +69,12 @@ def _system_summary(system: dict) -> dict:
     }
 
 
-def _trigger_group(db, trigger: dict):
-    """(group row, {channel: settings}) for the trigger's group, or (None, {})."""
-    from lib.trigger_group_module import get_group, get_group_notifiers
-    gid = int(trigger.get("alert_trigger_group_id") or 0)
-    group = get_group(db, trigger["radio_system_id"], gid) if gid else None
-    return (group, get_group_notifiers(db, [gid])[gid]) if group else (None, {})
+def _trigger_groups(db, trigger: dict):
+    """([group rows, top first], [{channel: settings} per group]) for the trigger's groups."""
+    from lib.trigger_group_module import get_group_notifiers, groups_of_trigger
+    groups = groups_of_trigger(db, trigger["radio_system_id"], trigger["alert_trigger_id"])
+    chans = get_group_notifiers(db, [g["alert_trigger_group_id"] for g in groups])
+    return groups, [chans[g["alert_trigger_group_id"]] for g in groups]
 
 
 def _test_payload(db, system: dict, trigger: dict) -> dict:
@@ -108,14 +108,14 @@ def trigger_notifiers_get(radio_system_id: int, alert_trigger_id: int):
     trigger = _trigger_or_404(db, radio_system_id, alert_trigger_id)
     system = _system_or_404(db, radio_system_id)
     channels = fill_template_defaults(get_trigger_notifiers(db, alert_trigger_id), system)
-    group, gch = _trigger_group(db, trigger)
+    groups, gch = _trigger_groups(db, trigger)
     return jsonify(success=True, message="OK", result={
         "channels": channels,
         "facebook_background": _bg_info(channels["facebook"].get("background")),
         "system": _system_summary(system),
         "system_includes": get_system_includes(db, [alert_trigger_id])[alert_trigger_id],
-        # the trigger's group: which of its alerts are on (this trigger is in them unless it sends its own)
-        "group": dict(group, facebook_background=_bg_info(gch["facebook"].get("background"))) if group else None,
+        # the trigger's groups (top first): which of their alerts are on (it's in them unless it sends its own)
+        "groups": [dict(g, facebook_background=_bg_info(c["facebook"].get("background"))) for g, c in zip(groups, gch)],
     }), 200
 
 
@@ -159,8 +159,8 @@ def trigger_notifier_test(radio_system_id: int, alert_trigger_id: int, channel: 
                           tz=current_app.config["TIMEZONE"])
     ctx["trigger_list"] = f"[TEST] {ctx.get('trigger_list') or trigger.get('alert_trigger_name')}"
     ctx["is_test"] = True
-    group, gch = _trigger_group(db, trigger)
-    ctx["group_name"] = (group or {}).get("group_name") or ""
+    groups, gch = _trigger_groups(db, trigger)
+    ctx["group_name"] = ", ".join(g["group_name"] for g in groups)
 
     if channel == "pushover":
         po = get_pushover_settings(db, alert_trigger_id).get("result") or {}
@@ -179,7 +179,7 @@ def trigger_notifier_test(radio_system_id: int, alert_trigger_id: int, channel: 
         return jsonify(success=False, message=err, result=[]), 400
     if channel == "facebook":
         cfg["background"] = get_trigger_notifiers(db, alert_trigger_id)["facebook"].get("background") or ""
-    cfg = layer_over_group(channel, cfg, gch.get(channel))
+    cfg = layer_over_group(channel, cfg, [c.get(channel) for c in gch])
     if channel == "telegram" and int(cfg.get("send_audio") or 0) and not ctx.get("audio_url"):
         return jsonify(success=False, message="A voice-message test needs at least one call on this system "
                                               "(or turn off \"Send the audio\" to test a text message).", result=[]), 400
@@ -343,6 +343,6 @@ def trigger_facebook_preview(radio_system_id: int, alert_trigger_id: int):
     trigger = _trigger_or_404(db, radio_system_id, alert_trigger_id)
     system = _system_or_404(db, radio_system_id)
     own = get_trigger_notifiers(db, alert_trigger_id)["facebook"].get("background")
-    _group, gch = _trigger_group(db, trigger)
-    group_bg = (gch.get("facebook") or {}).get("background")
+    _groups, gch = _trigger_groups(db, trigger)
+    group_bg = next((c["facebook"].get("background") for c in gch if c["facebook"].get("background")), None)
     return _preview(system, own or group_bg or (system.get("facebook") or {}).get("background"))

@@ -384,7 +384,7 @@ function populateEditor(t) {
     document.getElementById("updateTriggerIgnore").value    = t.alert_trigger_ignore_time;
     document.getElementById("updateTriggerTol").value       = t.alert_trigger_tone_tolerance;
     document.getElementById("updateTriggerTalkgroup").value = t.alert_trigger_talkgroup ?? "";
-    trigGroupSel.value = t.alert_trigger_group_id != null ? String(t.alert_trigger_group_id) : "";
+    renderTriggerGroupBoxes();
 
     // Legacy single-value tone fields (kept for compatibility)
     const map = {
@@ -1367,11 +1367,13 @@ function renderTriggerList() {
     noMatch.classList.toggle("d-none", rows.length > 0);
     listWrap.classList.toggle("d-none", rows.length === 0);
 
-    // With groups: a heading row per group (click = edit the group), then its triggers; ungrouped ones last
+    // With groups: a heading row per group (click = edit the group), then its triggers (a trigger in two groups
+    // shows under both); triggers in no group last
     const searching = !!searchEl.value.trim();
+    const inGroup = (t, g) => (g.trigger_ids || []).some(x => String(x) === String(t.alert_trigger_id));
     const sections = groupRows.length
-        ? [...groupRows.map(g => ({ g, rows: rows.filter(t => String(t.alert_trigger_group_id) === String(g.alert_trigger_group_id)) })),
-           { g: null, rows: rows.filter(t => !groupById(t.alert_trigger_group_id)) }]
+        ? [...groupRows.map(g => ({ g, rows: rows.filter(t => inGroup(t, g)) })),
+           { g: null, rows: rows.filter(t => !groupRows.some(g => inGroup(t, g))) }]
         : [{ g: null, rows, plain: true }];
     const head = ({ g, rows: r }) => `
         <tr class="trig-group-head" data-group-head="${g ? g.alert_trigger_group_id : ""}">
@@ -1383,12 +1385,16 @@ function renderTriggerList() {
           </td>
         </tr>`;
     listBody.innerHTML = sections
-        .filter(sec => sec.plain || sec.rows.length || (sec.g && !searching))
-        .map(sec => (sec.plain ? "" : head(sec)) + sec.rows.map(triggerRowHtml).join("")).join("");
+        // empty groups only show while there are few (they're always in the chips above the list)
+        .filter(sec => sec.plain || sec.rows.length || (sec.g && !searching && groupRows.length <= 4))
+        .map(sec => (sec.plain ? "" : head(sec)) + sec.rows.map(t => triggerRowHtml(t, sec.g)).join("")).join("");
 }
 
-/** One trigger's row in the list */
-function triggerRowHtml(t) {
+/** One trigger's row in the list (under group g: its other groups are shown as small tags) */
+function triggerRowHtml(t, g = null) {
+    const also = g ? groupsOf(t.alert_trigger_id).filter(x => x !== g) : [];
+    const alsoHtml = also.length ? `<span class="grp-also" title="Also in ${esc(also.map(x => x.group_name).join(", "))}">${
+        also.map(x => `<span class="grp-tag">${groupDot(x)}${esc(x.group_name)}</span>`).join("")}</span>` : "";
     const id = t.alert_trigger_id;
     const on = +(t.alert_trigger_enabled ?? 1) === 1;
     const badges = toneBadges(t);
@@ -1399,7 +1405,7 @@ function triggerRowHtml(t) {
     const firedTitle = t.last_fired_at ? new Date(t.last_fired_at * 1000).toLocaleString() : "";
     return `
     <tr data-trigger-id="${id}" class="${on ? "" : "trig-off"}">
-      <td class="fw-semibold trig-c-name">${esc(t.alert_trigger_name)}</td>
+      <td class="fw-semibold trig-c-name">${esc(t.alert_trigger_name)}${alsoHtml}</td>
       <td class="trig-c-tg" data-label="Talkgroup">${t.alert_trigger_talkgroup != null ? esc(t.alert_trigger_talkgroup) : `<span class="text-secondary">Any</span>`}</td>
       <td class="trig-tones trig-c-tones">${tones}</td>
       <td class="d-none d-lg-table-cell text-secondary small">${match}</td>
@@ -1687,8 +1693,8 @@ function makeNotifierEditor({ kind, acc, countEl, errEl }) {
         return st.channels[ch] || {};
     }
 
-    /** Trigger mode: is this channel's alert on for the trigger's group? */
-    const groupOn = ch => !isGroup && !!st.group && (st.group.channels_on || []).includes(ch);
+    /** Trigger mode: the trigger's groups (top first) whose alert on this channel is on */
+    const groupsOn = ch => (isGroup ? [] : (st.groups || []).filter(g => (g.channels_on || []).includes(ch)));
 
     function render() {
         const sys = st.system || {};
@@ -1790,16 +1796,17 @@ function makeNotifierEditor({ kind, acc, countEl, errEl }) {
     /** Facebook card: background picker (own image / clip, else the group's, else the system's), only for video posts */
     function mountFacebookBg(form) {
         const sysBase = `/api/systems/${curSys}`;
-        const groupBg = !isGroup && st.group ? st.group.facebook_background : null;
+        const bgGroup = isGroup ? null : (st.groups || []).find(g => g.facebook_background);
+        const groupBg = bgGroup ? bgGroup.facebook_background : null;
         FbBackground.mount(form.querySelector("[data-fbbg]"), {
             url: `${base()}/facebook/background`,
             previewUrl: `${base()}/facebook/preview`,
             own: st.facebook_background || null,
             fallback: groupBg || (st.system || {}).facebook_background || null,
-            fallbackUrl: groupBg ? `${sysBase}/trigger-groups/${st.group.alert_trigger_group_id}/facebook/background`
+            fallbackUrl: groupBg ? `${sysBase}/trigger-groups/${bgGroup.alert_trigger_group_id}/facebook/background`
                                  : `${sysBase}/facebook/background`,
             ownLabel: who,
-            fallbackLabel: groupBg ? `the ${st.group.group_name} group's` : "the system's",
+            fallbackLabel: groupBg ? `the ${bgGroup.group_name} group's` : "the system's",
             csrf: getCsrfToken,
             onChange: info => { st.facebook_background = info; },
         });
@@ -1838,16 +1845,17 @@ function makeNotifierEditor({ kind, acc, countEl, errEl }) {
         sysBadge.className = "notif-sys-badge badge rounded-pill " + (!sysOn ? "d-none" : included ? "notif-sys-in" : "notif-sys-out");
         sysBadge.textContent = included ? "System: in" : "System: left out";
 
-        // Group badge + note: only shown when the trigger's group sends on this channel
-        const gOn = groupOn(ch);
-        const gName = st.group ? st.group.group_name : "";
-        grpBadge.className = "notif-grp-badge badge rounded-pill " + (!gOn ? "d-none" : on ? "notif-sys-out" : "notif-sys-in");
-        grpBadge.textContent = `${gName}: ${on ? "own instead" : "in"}`;
+        // Group badge + note: only shown when one of the trigger's groups sends on this channel
+        const on_ = groupsOn(ch);
+        const gNames = on_.map(g => g.group_name).join(", ");
+        grpBadge.className = "notif-grp-badge badge rounded-pill " + (!on_.length ? "d-none" : on ? "notif-sys-out" : "notif-sys-in");
+        grpBadge.textContent = `${gNames}: ${on ? "own instead" : "in"}`;
         const note = item.querySelector("[data-group-note]");
-        note.classList.toggle("d-none", !gOn);
-        note.textContent = !gOn ? "" : on
-            ? `This trigger sends its own ${n.name} alert, so it's left out of the ${gName} group's.`
-            : `This trigger is in the ${gName} group's ${n.name} alert.`;
+        note.classList.toggle("d-none", !on_.length);
+        const groupWord = on_.length === 1 ? `the ${gNames} group's` : `the ${gNames} groups'`;
+        note.textContent = !on_.length ? "" : on
+            ? `This trigger sends its own ${n.name} alert, so it's left out of ${groupWord}.`
+            : `This trigger is in ${groupWord} ${n.name} alert${on_.length === 1 ? "" : "s"}.`;
     }
 
     function updateCount() {
@@ -2035,8 +2043,10 @@ const loadNotifiers = () => triggerNotifiers.load();
 
 
 /* ===================================================================
-   14) TRIGGER GROUPS - e.g. Fire / EMS: each group sends its own alerts
-       (one per call) for its triggers, with its own Facebook background
+   14) TRIGGER GROUPS - e.g. Fire / EMS (a trigger can be in several):
+       each group sends its own alerts for its triggers, with its own
+       Facebook background; the order and the "together" setting decide
+       what happens when several fire on one call
    ===================================================================*/
 
 const groupsCard   = document.getElementById("groupsCard");
@@ -2047,8 +2057,13 @@ const groupForm    = document.getElementById("groupGeneralForm");
 const groupMembers = document.getElementById("groupMembers");
 const groupAddEl   = document.getElementById("groupAddModal");
 const groupDelEl   = document.getElementById("groupDeleteModal");
-const trigGroupSel = document.getElementById("updateTriggerGroup");
+const togetherEl   = document.getElementById("togetherModal");
+const togetherForm = document.getElementById("togetherForm");
+const trigGroupBoxes = document.getElementById("updateTriggerGroups");
 const CHANNEL_ICONS = Object.fromEntries(NOTIFIERS.map(n => [n.key, [n.icon, n.name]]));
+const TOGETHER_LABELS = { separate: "Each group sends its own", top: "One alert, top group",
+                          image: "One alert, \"several groups\" image" };
+let togetherState = null;     // { together_mode, channel_modes, combined_background }
 
 const groupNotifiers = makeNotifierEditor({
     kind: "group",
@@ -2061,27 +2076,47 @@ function groupById(id) {
     return groupRows.find(g => String(g.alert_trigger_group_id) === String(id));
 }
 
+/** The groups a trigger is in, top first */
+function groupsOf(triggerId) {
+    return groupRows.filter(g => (g.trigger_ids || []).some(x => String(x) === String(triggerId)));
+}
+
 async function loadGroups() {
     if (!curSys) { groupRows = []; return; }
     const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups`);
     groupRows = rsp.success ? (rsp.result || []) : [];
 }
 
-/** The chips above the list, and the Group dropdown in the trigger editor */
+const groupDot = g => `<span class="grp-dot" style="background:${esc(g.group_color)}"></span>`;
+
+/** The chips above the list, and the group boxes in the open trigger's General tab */
 function renderGroups() {
     groupsCard.classList.toggle("d-none", !curSys);
     document.getElementById("groupsEmpty").classList.toggle("d-none", groupRows.length > 0);
+    document.getElementById("togetherBtn").classList.toggle("d-none", groupRows.length < 2);
     groupChips.innerHTML = groupRows.map(g => {
         const icons = (g.channels_on || []).map(ch =>
             `<i class="bi ${CHANNEL_ICONS[ch][0]}" title="${esc(CHANNEL_ICONS[ch][1])} alert on"></i>`).join("");
-        return `<button type="button" class="btn btn-sm grp-chip" data-group-id="${g.alert_trigger_group_id}" title="Edit group">
-            <span class="grp-dot" style="background:${esc(g.group_color)}"></span>${esc(g.group_name)}
+        return `<button type="button" class="btn btn-sm grp-chip" data-group-id="${g.alert_trigger_group_id}" title="Edit ${esc(g.group_name)}">
+            ${groupDot(g)}<span class="grp-chip-name">${esc(g.group_name)}</span>
             <span class="grp-chip-count" title="Triggers">${g.trigger_count}</span>${icons ? `<span class="grp-chip-icons">${icons}</span>` : ""}</button>`;
     }).join("");
-    const cur = trigGroupSel.value;
-    trigGroupSel.innerHTML = `<option value="">No group</option>` +
-        groupRows.map(g => `<option value="${g.alert_trigger_group_id}">${esc(g.group_name)}</option>`).join("");
-    trigGroupSel.value = cur;
+    renderTriggerGroupBoxes();
+}
+
+function renderTriggerGroupBoxes() {
+    if (!curTrig) { trigGroupBoxes.innerHTML = ""; return; }
+    if (!groupRows.length) {
+        trigGroupBoxes.innerHTML = `<span class="small text-secondary">This system has no groups yet (Add group, above the trigger list).</span>`;
+        return;
+    }
+    const mine = new Set(groupsOf(curTrig).map(g => String(g.alert_trigger_group_id)));
+    trigGroupBoxes.innerHTML = groupRows.map(g => {
+        const id = `trig-g-${g.alert_trigger_group_id}`;
+        return `<div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="${id}" data-group-id="${g.alert_trigger_group_id}"${mine.has(String(g.alert_trigger_group_id)) ? " checked" : ""}>
+            <label class="form-check-label" for="${id}">${groupDot(g)}${esc(g.group_name)}</label></div>`;
+    }).join("");
 }
 
 /** After a group alert is switched on / off: refresh the chips (their channel icons) */
@@ -2108,27 +2143,26 @@ function renderGroupMembers() {
         groupMembers.innerHTML = `<div class="small text-secondary">This system has no triggers yet.</div>`;
         return;
     }
+    const g = groupById(curGroup);
     groupMembers.innerHTML = triggerRows.map(t => {
-        const gid = t.alert_trigger_group_id;
-        const other = gid && String(gid) !== curGroup ? groupById(gid) : null;
         const id = `grp-m-${t.alert_trigger_id}`;
+        const inThis = (g?.trigger_ids || []).some(x => String(x) === String(t.alert_trigger_id));
+        const others = groupsOf(t.alert_trigger_id).filter(x => String(x.alert_trigger_group_id) !== curGroup);
         return `<div class="form-check grp-member">
-            <input class="form-check-input" type="checkbox" id="${id}" data-trigger-id="${t.alert_trigger_id}"${String(gid) === curGroup ? " checked" : ""}>
-            <label class="form-check-label" for="${id}">${esc(t.alert_trigger_name)}${
-                other ? ` <span class="small text-secondary">(now in ${esc(other.group_name)})</span>` : ""}</label></div>`;
+            <input class="form-check-input" type="checkbox" id="${id}" data-trigger-id="${t.alert_trigger_id}"${inThis ? " checked" : ""}>
+            <label class="form-check-label" for="${id}">${esc(t.alert_trigger_name)}${others.length
+                ? ` <span class="small text-secondary">(also in ${others.map(x => esc(x.group_name)).join(", ")})</span>` : ""}</label></div>`;
     }).join("");
 }
 
-/** Put a trigger in a group (or none) and refresh what shows it */
-async function setTriggerGroup(triggerId, groupId) {
-    const rsp = await apiJson(`/api/systems/${curSys}/triggers/${triggerId}/group`,
-        { method: "PUT", body: { alert_trigger_group_id: groupId || "" } });
+/** Put a trigger in a group or take it out (its other groups stay), then refresh what shows it */
+async function setMembership(triggerId, groupId, member) {
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/${groupId}/members/${triggerId}`,
+        { method: member ? "PUT" : "DELETE" });
     if (!rsp.success) {
         showAlert(rsp.message || "Couldn't change the group.", "danger");
         return false;
     }
-    const t = triggerRows.find(x => String(x.alert_trigger_id) === String(triggerId));
-    if (t) t.alert_trigger_group_id = rsp.result.alert_trigger_group_id;
     await loadGroups();
     renderGroups();
     renderTriggerList();
@@ -2144,25 +2178,24 @@ groupMembers.addEventListener("change", async ev => {
     const box = ev.target.closest("input[data-trigger-id]");
     if (!box) return;
     box.disabled = true;
-    const ok = await setTriggerGroup(box.dataset.triggerId, box.checked ? curGroup : "");
+    const ok = await setMembership(box.dataset.triggerId, curGroup, box.checked);
     if (!ok) box.checked = !box.checked;
-    else showAlert(box.checked ? `Added to ${groupById(curGroup)?.group_name}.` : "Taken out of the group.", "success");
+    else showAlert(box.checked ? `Added to ${groupById(curGroup)?.group_name}.` : `Taken out of ${groupById(curGroup)?.group_name}.`, "success");
     renderGroupMembers();
 });
 
-trigGroupSel.addEventListener("change", async () => {
-    trigGroupSel.disabled = true;
-    const t = triggerRows.find(x => String(x.alert_trigger_id) === String(curTrig));
-    const before = t?.alert_trigger_group_id ?? "";
-    const wanted = trigGroupSel.value;
-    if (await setTriggerGroup(curTrig, wanted)) {
-        trigGroupSel.value = wanted;
-        showAlert(wanted ? `Now in ${groupById(wanted)?.group_name}.` : "No group now.", "success");
-        loadNotifiers();                 // the Notifiers tab shows the group's alerts
+trigGroupBoxes.addEventListener("change", async ev => {
+    const box = ev.target.closest("input[data-group-id]");
+    if (!box) return;
+    box.disabled = true;
+    const name = groupById(box.dataset.groupId)?.group_name;
+    if (await setMembership(curTrig, box.dataset.groupId, box.checked)) {
+        showAlert(box.checked ? `Now in ${name}.` : `Taken out of ${name}.`, "success");
+        loadNotifiers();                 // the Notifiers tab shows the groups' alerts
     } else {
-        trigGroupSel.value = String(before ?? "");
+        box.checked = !box.checked;
+        box.disabled = false;
     }
-    trigGroupSel.disabled = false;
 });
 
 document.getElementById("addGroupBtn").addEventListener("click", () => {
@@ -2208,7 +2241,6 @@ document.getElementById("groupDeleteForm").addEventListener("submit", async ev =
     bootstrap.Modal.getOrCreateInstance(groupDelEl).hide();
     showAlert(rsp.message || (rsp.success ? "Group deleted." : "Couldn't delete the group."), rsp.success ? "success" : "danger");
     if (!rsp.success) return;
-    triggerRows.forEach(t => { if (String(t.alert_trigger_group_id) === curGroup) t.alert_trigger_group_id = null; });
     groupEditor.hide();
     await loadGroups();
     renderGroups();
@@ -2216,6 +2248,102 @@ document.getElementById("groupDeleteForm").addEventListener("submit", async ev =
 });
 
 groupEdEl.addEventListener("hidden.bs.offcanvas", () => { curGroup = null; });
+
+/* ----- Order & several groups firing together ----- */
+
+function renderGroupOrder() {
+    const list = document.getElementById("groupOrderList");
+    list.innerHTML = groupRows.map((g, i) => `
+        <li class="grp-order-item" data-group-id="${g.alert_trigger_group_id}">
+            <span class="grp-order-pos">${i + 1}</span>${groupDot(g)}<span class="grp-order-name">${esc(g.group_name)}</span>
+            <span class="btn-group btn-group-sm ms-auto">
+                <button type="button" class="btn btn-outline-secondary" data-move="-1" title="Move up" aria-label="Move ${esc(g.group_name)} up"${i === 0 ? " disabled" : ""}>
+                    <i class="bi bi-arrow-up"></i></button>
+                <button type="button" class="btn btn-outline-secondary" data-move="1" title="Move down" aria-label="Move ${esc(g.group_name)} down"${i === groupRows.length - 1 ? " disabled" : ""}>
+                    <i class="bi bi-arrow-down"></i></button>
+            </span>
+        </li>`).join("");
+}
+
+/** The effective mode for a notifier (its own choice, else the default) */
+const modeOf = ch => (togetherState.channel_modes || {})[ch] || togetherState.together_mode;
+
+function renderTogether() {
+    const t = togetherState;
+    togetherForm.elements.together_mode.value = t.together_mode;
+    const opts = ch => [["", `Same as above`], ["separate", TOGETHER_LABELS.separate], ["top", TOGETHER_LABELS.top],
+                        ...(ch === "facebook" ? [["image", TOGETHER_LABELS.image]] : [])];
+    document.getElementById("togetherChannels").innerHTML = NOTIFIERS.map(n => `
+        <div class="grp-channel-mode">
+            <label class="form-label mb-0" for="tg-ch-${n.key}"><i class="bi ${n.icon} notif-icon-${n.key}"></i> ${esc(n.name)}</label>
+            <select class="form-select form-select-sm" id="tg-ch-${n.key}" data-channel="${n.key}">${
+                opts(n.key).map(([v, l]) => `<option value="${v}"${((t.channel_modes || {})[n.key] || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+        </div>`).join("");
+    document.getElementById("togetherOverrides").open = Object.keys(t.channel_modes || {}).length > 0;
+    toggleTogetherBg();
+    FbBackground.mount(document.getElementById("togetherBg"), {
+        url: `/api/systems/${curSys}/trigger-groups/together/background`,
+        previewUrl: `/api/systems/${curSys}/trigger-groups/together/preview`,
+        own: t.combined_background || null,
+        fallback: null,
+        fallbackUrl: "",
+        ownLabel: "the \"several groups\"",
+        fallbackLabel: "",
+        csrf: getCsrfToken,
+        onChange: info => { togetherState.combined_background = info; },
+    });
+}
+
+/** The "several groups" image only matters when Facebook ends up on that choice */
+function toggleTogetherBg() {
+    const fb = document.getElementById("tg-ch-facebook")?.value || togetherForm.elements.together_mode.value;
+    document.getElementById("togetherBgWrap").classList.toggle("d-none", fb !== "image");
+}
+
+function readTogether() {
+    const channel_modes = {};
+    togetherForm.querySelectorAll("select[data-channel]").forEach(s => { if (s.value) channel_modes[s.dataset.channel] = s.value; });
+    return { together_mode: togetherForm.elements.together_mode.value, channel_modes };
+}
+
+document.getElementById("togetherBtn").addEventListener("click", async () => {
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/together`);
+    if (!rsp.success) { showAlert(rsp.message || "Couldn't load the group settings.", "danger"); return; }
+    togetherState = rsp.result;
+    renderGroupOrder();
+    renderTogether();
+    bootstrap.Modal.getOrCreateInstance(togetherEl).show();
+});
+
+togetherForm.addEventListener("change", ev => {
+    if (ev.target.name === "together_mode" || ev.target.dataset.channel) toggleTogetherBg();
+});
+
+document.getElementById("groupOrderList").addEventListener("click", async ev => {
+    const btn = ev.target.closest("[data-move]");
+    if (!btn) return;
+    const ids = groupRows.map(g => String(g.alert_trigger_group_id));
+    const id = btn.closest("[data-group-id]").dataset.groupId;
+    const i = ids.indexOf(id), j = i + Number(btn.dataset.move);
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/order`, { method: "PUT", body: { group_ids: ids } });
+    if (!rsp.success) { showAlert(rsp.message || "Couldn't save the order.", "danger"); return; }
+    groupRows = rsp.result || groupRows;
+    renderGroupOrder();
+    document.querySelector(`#groupOrderList [data-group-id="${id}"] [data-move="${btn.dataset.move}"]`)?.focus();
+    renderGroups();
+    renderTriggerList();
+});
+
+togetherForm.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/together`, { method: "PUT", body: readTogether() });
+    showAlert(rsp.success ? "Saved." : (rsp.message || "Couldn't save."), rsp.success ? "success" : "danger");
+    if (!rsp.success) return;
+    togetherState = rsp.result;
+    bootstrap.Modal.getOrCreateInstance(togetherEl).hide();
+});
 
 // Modals opened from the side panels must live at <body> level to stack above them
 document.body.appendChild(groupAddEl);

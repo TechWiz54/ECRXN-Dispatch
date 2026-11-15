@@ -30,8 +30,8 @@ sense straight away. Change any of them; the [placeholders](#placeholders) below
 Each channel has two switches. Both save as soon as you flip them.
 
 - **Include in the system's … alert.** Whether this trigger is part of the system's alert on that channel.
-  New triggers are only in the system's **Pushover** alert; switch others on as you need them. (Triggers made
-  before version 1.2 keep being in every system alert, as they were.)
+  New triggers are in every system alert, so whatever the system has switched on goes out for them; switch off
+  the ones a trigger shouldn't be in. (Triggers made before version 1.5 keep the switches they had.)
 - **Send this trigger's own … alert.** A separate alert for this trigger only, using the settings in the card.
   If something needed (marked <span style="color:red">*</span>) is missing, it switches back off and says what.
 
@@ -63,30 +63,47 @@ stream URL if it has one.
 
 Group a system's triggers, say **Fire** and **EMS**, and each group sends its own alerts, with its own
 messages, channels and Facebook video background. For example, fire stations post to Facebook over a fire truck
-picture and EMS stations over an ambulance picture, from the same Page.
+picture and EMS stations over an ambulance picture, from the same Page. A trigger can be in several groups.
 
 **Set one up** (on the **Triggers** page):
 
 1. Click **Add group**, give it a name and a colour.
-2. Tick the triggers that belong in it (each trigger can be in one group). You can also pick a trigger's
-   **Group** on its General tab. The trigger list then shows each group with its triggers under it.
+2. Tick the triggers that belong in it. You can also tick a trigger's **Groups** on its General tab. The trigger
+   list then shows each group with its triggers under it (a trigger in two groups shows under both, tagged with
+   the other).
 3. Open the group's **Notifiers** tab and set up its alerts the same way as a trigger's: fill in where it goes,
-   **Send test**, **Save**, then switch on **Send this group's … alert**. Facebook has its own **Video background**.
+   **Send test**, **Save**, then switch on **Send this group's … alert**. Every message starts filled in, and
+   Facebook has its own **Video background**. A group's alerts stay off until you switch them on.
 
 **How a group alert is sent:**
 
 - Once per call, when any of the group's triggers fire. `{trigger_list}` names the group's triggers that fired
-  (`Station 4 Fire, Station 12 Rescue`) and `{group_name}` the group (`Fire`). If fire and EMS triggers fire in
-  the same call, the Fire group and the EMS group each send their own.
-- A trigger that has **its own** alert on a channel sends that instead, and is left out of its group's alert on that
+  (`Station 4 Fire, Station 12 Rescue`) and `{group_name}` the group (`Fire`).
+- A trigger that has **its own** alert on a channel sends that instead, and is left out of its groups' alerts on that
   channel. Its Notifiers tab shows **Fire: in** or **Fire: own instead** for each channel.
-- Blank tokens and messages use the system's. In a trigger's own alert, blank ones use its group's first, then the
-  system's (and a trigger without its own Facebook background uses the group's).
-- The **system alert** is separate. If a trigger should only go out through its group, switch off its
-  **Include in the system's … alert** on that channel (new triggers are only in the system's Pushover alert).
+- Blank tokens and messages use the system's. In a trigger's own alert, blank ones use its groups' first (top group
+  first), then the system's; a trigger without its own Facebook background uses its top group's.
+- The **system alert** is separate. If a trigger should only go out through its groups, switch off its
+  **Include in the system's … alert** on that channel.
 
-Deleting a group keeps its triggers, just without a group. A whole-system export includes the groups; triggers
-imported into another system come in without a group.
+### When several groups fire on the same call
+
+Say Fire and EMS are toned out together (or one trigger in both groups fires). With two or more groups,
+**Order & together** (next to **Add group**) sets:
+
+- **Order**: move groups up and down. The top group wins when one alert covers several groups.
+- **What happens**, as one choice for every notifier:
+  - **Each group sends its own**: a Fire post and an EMS post, each with its own settings and background.
+  - **One alert, using the top group** (the default): the top group's settings and background, with
+    `{trigger_list}` naming every trigger that fired and `{group_name}` every group (`Fire, EMS`).
+  - **One alert, with a "several groups" image**: the same, but Facebook uses a background you upload there just
+    for this case (without one, the top group's). Other notifiers treat it like "top group".
+- **Different for some notifiers**: give any notifier its own choice, for example one Facebook post but a
+  Discord message per group.
+
+Deleting a group keeps its triggers (in their other groups, if any). A whole-system export includes the groups,
+which triggers are in them, their order and these settings; triggers imported into another system come in
+without groups.
 
 ---
 
@@ -222,7 +239,8 @@ BMP, AVIF and more; up to **250 MB**) or a **clip** (MP4, MOV, WebM, MKV, AVI, W
 
 A **system background** is used by every alert without its own; a [group](#trigger-groups) background replaces it
 for that group's alerts (say, an EMS picture for the EMS group), and a **trigger background** for that trigger's own
-alert. A trigger without its own uses its group's, then the system's. With none, the video is black. Pictures are cropped to fill the
+alert. A trigger without its own uses its top group's, then the system's. One alert for several groups can have
+its own ["several groups" image](#when-several-groups-fire-on-the-same-call). With none, the video is black. Pictures are cropped to fill the
 frame, so a 1080×1920 portrait picture looks best. **Preview video** shows the first 15 seconds of the latest call
 over the background before anything is posted.
 
@@ -255,7 +273,7 @@ value or post text. `{{trigger_list}}` works too. Anything that isn't a placehol
 | `{trigger_list}` | `Station 4 Fire, County EMS` | Triggers that fired, comma separated |
 | `{trigger_list_lines}` | `Station 4 Fire`<br>`County EMS` | One per line |
 | `{trigger_count}` | `2` | |
-| `{group_name}` | `Fire` | In a [group's alert](#trigger-groups), the group; in a trigger's own alert, its group (blank otherwise) |
+| `{group_name}` | `Fire` | In a [group's alert](#trigger-groups), the group (`Fire, EMS` when one alert covers several); in a trigger's own alert, its groups (blank otherwise) |
 | `{trigger_names}` | `["Station 4 Fire", "County EMS"]` | A list, for JSON (n8n) |
 | `{system_name}` | `Demo County` | |
 | `{system_id}` | `1001` | The System ID your uploader sends |

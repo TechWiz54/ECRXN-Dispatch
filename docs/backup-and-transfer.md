@@ -9,7 +9,7 @@ for moving to a new computer, or for setting up a second server the same way.
 
 - **Export:** open the system on **Radio Systems** and go to its **Export** tab, then **Download**. One file
   with **everything** for that system: every tab (upload, storage, tones, AI, every alert channel with its
-  messages, webhook URLs, tokens and passwords) plus all its triggers, their tones and their own alerts, and its trigger groups with their alerts.
+  messages, webhook URLs, tokens and passwords) plus all its triggers, their tones and their own alerts, and its trigger groups with their alerts, members and order.
 - **Import:** **Radio Systems → Import** (next to **Add System**) creates a new system from such a file. If this
   server already has one with the same System ID or name, enter a new one in the boxes.
 
@@ -28,8 +28,8 @@ names it), so switch systems there first:
 - **Tones spreadsheet (CSV)**: one row per tone, for Excel or Google Sheets (below).
 - **Triggers file (JSON)**: every trigger of the selected system, with its tones, settings and own alerts.
 - **Import triggers or tones…**: adds the triggers from a triggers file, a whole-system file, or a tones
-  spreadsheet to the selected system. Existing triggers aren't changed. Imported triggers have no group; put them in
-  one afterwards.
+  spreadsheet to the selected system. Existing triggers aren't changed. Imported triggers have no groups; put them in
+  groups afterwards.
 
 ---
 

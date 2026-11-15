@@ -49,11 +49,11 @@
                 </div>
             </div>
             <div class="row">
-                <div class="col-md-4 mb-3">
-                    <label class="form-label" for="updateTriggerGroup">Group:</label>
-                    {# no name: saved on its own as soon as it changes #}
-                    <select id="updateTriggerGroup" class="form-select"></select>
-                    <div class="form-text">The group's alerts (Notifiers on the group) include this trigger. Saved straight away.</div>
+                <div class="col-12 mb-3">
+                    <span class="form-label d-block">Groups:</span>
+                    {# no names: each box is saved on its own as soon as it changes #}
+                    <div id="updateTriggerGroups" class="trig-group-boxes"></div>
+                    <div class="form-text">The groups' alerts (Notifiers on each group) include this trigger. Saved straight away.</div>
                 </div>
             </div>
             <div class="row">
@@ -281,8 +281,8 @@
         <p class="small text-body-secondary mb-3">
             For each channel, choose whether this trigger is part of the <strong>system's alert</strong>
             (set on the Radio Systems page) and whether it also sends <strong>its own alert</strong>, for example to
-            a station's own Discord channel. If the trigger is in a <strong>group</strong>, the group's alerts include it
-            unless it sends its own on that channel. Blank tokens and messages use the group's, then the system's.
+            a station's own Discord channel. If the trigger is in <strong>groups</strong>, their alerts include it
+            unless it sends its own on that channel. Blank tokens and messages use its groups', then the system's.
         </p>
 
         {# Channel cards are built by edit_triggers.js #}

@@ -78,9 +78,15 @@
             <span class="fw-semibold small me-1">Groups</span>
             <div id="groupChips" class="d-flex flex-wrap gap-2"></div>
             <span id="groupsEmpty" class="small text-secondary">Group triggers (e.g. Fire, EMS) so each group sends its own alerts, with its own Facebook background.</span>
-            <button id="addGroupBtn" type="button" class="btn btn-sm btn-outline-secondary ms-auto">
-                <i class="bi bi-plus-lg"></i> Add group
-            </button>
+            <div class="grp-actions ms-auto">
+                <button id="togetherBtn" type="button" class="btn btn-sm btn-outline-secondary d-none"
+                        title="Group order, and what happens when several groups fire on one call">
+                    <i class="bi bi-sliders"></i> Order &amp; together
+                </button>
+                <button id="addGroupBtn" type="button" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-plus-lg"></i> Add group
+                </button>
+            </div>
         </div>
     </div>
 

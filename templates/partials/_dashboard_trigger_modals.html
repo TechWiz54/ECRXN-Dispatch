@@ -131,3 +131,64 @@
         </form>
     </div>
 </div>
+
+{# ───────────────────────────────────────────────────────
+   Group order + several groups firing together
+   ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="togetherModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
+        <form id="togetherForm" class="modal-content input-form" novalidate>
+            <div class="modal-header">
+                <h5 class="modal-title">Group order &amp; firing together</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-1">Order</h6>
+                <p class="small text-body-secondary mb-2">The top group wins when several fire on one call and send one
+                    alert together. Saved as soon as you move one.</p>
+                <ol id="groupOrderList" class="grp-order list-unstyled mb-4"></ol>
+
+                <h6 class="mb-1">When several groups fire on the same call</h6>
+                <p class="small text-body-secondary mb-2">For example Fire and EMS toned out together. A trigger in two
+                    groups counts as both.</p>
+                <div class="grp-modes mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="together_mode" id="tgSeparate" value="separate">
+                        <label class="form-check-label" for="tgSeparate"><strong>Each group sends its own</strong>
+                            <span class="d-block small text-body-secondary">A Fire post and an EMS post, each with its own
+                                settings and background.</span></label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="together_mode" id="tgTop" value="top">
+                        <label class="form-check-label" for="tgTop"><strong>One alert, using the top group</strong>
+                            <span class="d-block small text-body-secondary">The top group's settings and background;
+                                <code>{trigger_list}</code> names every trigger that fired.</span></label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="together_mode" id="tgImage" value="image">
+                        <label class="form-check-label" for="tgImage"><strong>One alert, with a "several groups" image</strong>
+                            <span class="d-block small text-body-secondary">Like the one above, but Facebook uses the
+                                image below. Other notifiers work like "top group".</span></label>
+                    </div>
+                </div>
+
+                <details class="grp-overrides mb-3" id="togetherOverrides">
+                    <summary class="small fw-semibold">Different for some notifiers</summary>
+                    <div class="small text-body-secondary my-2">For example one Facebook post, but a Discord message per group.</div>
+                    <div id="togetherChannels" class="grp-channel-modes"></div>
+                </details>
+
+                <div id="togetherBgWrap" class="d-none">
+                    <h6 class="mb-1">"Several groups" Facebook background</h6>
+                    <p class="small text-body-secondary mb-2">Used for one Facebook video covering several groups. Without
+                        one, the top group's background is used.</p>
+                    <div id="togetherBg"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i> Save</button>
+            </div>
+        </form>
+    </div>
+</div>

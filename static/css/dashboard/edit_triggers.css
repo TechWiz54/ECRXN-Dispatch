@@ -375,3 +375,34 @@
     .trig-table tbody tr.trig-group-head td { background: transparent; padding: 0; border: 0; }
     .trig-group-head .grp-head-edit { opacity: 1; }
 }
+.grp-chip-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grp-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.grp-also { display: inline-flex; flex-wrap: wrap; gap: .3rem; margin-left: .6rem; vertical-align: middle; }
+.grp-tag { display: inline-flex; align-items: center; font-size: .7rem; font-weight: 500; color: var(--bs-secondary-color);
+           border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; padding: .05rem .5rem; }
+.grp-tag .grp-dot { width: .5rem; height: .5rem; margin-right: .3rem; }
+.trig-group-boxes .form-check-inline { margin-right: 1.25rem; }
+.trig-group-boxes .grp-dot { width: .6rem; height: .6rem; margin-right: .35rem; }
+/* Order & together */
+.grp-order { counter-reset: none; }
+.grp-order-item { display: flex; align-items: center; gap: .1rem; padding: .45rem .6rem; border: 1px solid rgba(255, 255, 255, .1);
+                  border-radius: .5rem; margin-bottom: .35rem; background: rgba(255, 255, 255, .03); }
+.grp-order-pos { width: 1.5rem; color: var(--bs-secondary-color); font-size: .8rem; }
+.grp-order-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.grp-modes .form-check { margin-bottom: .6rem; }
+.grp-overrides summary { cursor: pointer; }
+.grp-channel-modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .5rem 1rem; }
+.grp-channel-mode { display: grid; grid-template-columns: 7rem 1fr; align-items: center; gap: .5rem; }
+@media (max-width: 767.98px) {
+    /* Lots of groups: the chips scroll sideways in one row instead of pushing the list down */
+    .trig-groups-card .card-body { flex-direction: column; align-items: stretch !important; }
+    #groupChips { flex-wrap: nowrap !important; overflow-x: auto; padding-bottom: .25rem; scrollbar-width: thin;
+                  -webkit-overflow-scrolling: touch; }
+    #groupChips .grp-chip { flex: 0 0 auto; }
+    .grp-chip-name { max-width: 9rem; }
+    .trig-groups-card, .trig-groups-card .card-body, #groupChips { min-width: 0; max-width: 100%; }
+    .grp-actions { margin-left: 0 !important; width: 100%; flex-wrap: nowrap; }
+    .grp-actions .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .grp-also { display: flex; margin: .2rem 0 0; }
+    .grp-channel-mode { grid-template-columns: 6rem 1fr; }
+}

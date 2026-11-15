@@ -169,7 +169,8 @@ body.ap-edit-systems .ap-content-card{
 .ap-tabbtn { text-align: start; justify-content: flex-start; }
 /* Subtle hover instead of the global red pill hover */
 .nav-pills .ap-tabbtn:hover:not(.active) { background: rgba(255, 255, 255, .06); border-color: transparent; }
-.ap-nav-section { letter-spacing: .06em; }
+.ap-nav-section { letter-spacing: .08em; font-size: .7rem; font-weight: 600; padding-top: .75rem !important;
+                  margin-top: .75rem !important; border-top: 1px solid rgba(255, 255, 255, .08); }
 
 /* Forms inside the editor: no sideways overflow on phones */
 #systemTabContent { min-width: 0; }
@@ -187,7 +188,7 @@ body.ap-edit-systems .ap-content-card{
     #makeFieldsTable th:first-child, #makeFieldsTable td:first-child { display: none; }
 }
 
-/* Delivery tabs: brand-colored icons (same colors as the trigger Notifiers tab) */
+/* Notifier tabs: brand-colored icons (same colors as the trigger Notifiers tab) */
 #telegram-tab i { color: #2aabee; }
 #discord-tab i  { color: #5865f2; }
 #make-tab i     { color: #a46bf5; }

@@ -38,7 +38,7 @@ SECRET_COLUMNS = {
 }
 SECRET_JSON_KEYS = {"bot_token", "webhook_url", "api_key", "smtp_password", "jwt_passphrase", "page_token"}
 # Uploaded files aren't in the export
-FILE_COLUMNS = {"facebook_background"}
+FILE_COLUMNS = {"facebook_background", "combined_background"}
 FILE_JSON_KEYS = {"background"}
 
 
@@ -69,6 +69,8 @@ def _schema(db) -> Dict[str, Dict[str, Any]]:
             "pk": [c["name"] for c in sorted(info, key=lambda c: c["pk"]) if c["pk"]],
             "parent": parent,
             "refs": [(f["table"], f["from"], f["to"]) for f in fks if parent and f["from"] != parent[1]],
+            # a link table (e.g. which triggers are in which group): two owners, both must come along
+            "links": [(f["table"], f["from"], f["to"]) for f in owners] if len(owners) == 2 else [],
         }
     return out
 
@@ -135,6 +137,15 @@ def _collect(db, schema, root: str, root_ids: List[int], secrets: bool) -> Dict[
         rows = db.execute_query(
             f"SELECT * FROM {t} WHERE {col} IN ({','.join('?' for _ in wanted)})", wanted, fetch_mode="all")["result"]
         data[t] = [_scrub(t, r, secrets) for r in rows or []]
+    for t, meta in schema.items():
+        links = meta.get("links") or []
+        if not links or not all(data.get(lt) for lt, _c, _p in links):
+            continue
+        (t1, c1, p1), (t2, c2, p2) = links
+        ids1, ids2 = [r[p1] for r in data[t1]], {r[p2] for r in data[t2]}
+        rows = db.execute_query(f"SELECT * FROM {t} WHERE {c1} IN ({','.join('?' for _ in ids1)})", ids1,
+                                fetch_mode="all")["result"] or []
+        data[t] = [r for r in rows if r[c2] in ids2]
     return data
 
 
@@ -233,6 +244,19 @@ def _insert_rows(db, schema, doc_tables, order: List[str], idmap: Dict[str, Dict
     return counts
 
 
+def _insert_links(db, schema, doc_tables, idmap: Dict[str, Dict[Any, Any]]) -> None:
+    """Rows of link tables whose both ends were imported (e.g. a trigger's place in a group)."""
+    for t, meta in schema.items():
+        links = meta.get("links") or []
+        if not links:
+            continue
+        (t1, c1, _p1), (t2, c2, _p2) = links
+        for r in doc_tables.get(t) or []:
+            a, b = idmap.get(t1, {}).get(r.get(c1)), idmap.get(t2, {}).get(r.get(c2))
+            if a is not None and b is not None:
+                _ok(db.execute_commit(f"INSERT OR IGNORE INTO {t} ({c1}, {c2}) VALUES (?, ?)", (a, b)))
+
+
 def _ok(res: Dict[str, Any]) -> Dict[str, Any]:
     if not res.get("success"):
         raise ImportError_(f"Couldn't import: {res.get('message')}")
@@ -281,6 +305,7 @@ def import_system(db, doc: Dict[str, Any], *, system_decimal: Optional[int] = No
                 _ok(db.execute_commit(f"DELETE FROM {t} WHERE {meta['parent'][1]} IN "
                                       f"({','.join('?' for _ in parent_ids)})", parent_ids))
         counts = _insert_rows(db, schema, doc["tables"], order, idmap, adopt)
+        _insert_links(db, schema, doc["tables"], idmap)
         db.commit()
     except Exception:
         db.rollback()

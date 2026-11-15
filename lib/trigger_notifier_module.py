@@ -33,7 +33,9 @@ CHANNELS = ("telegram", "discord", "make", "email", "n8n", "facebook")
 GROUP_CHANNELS = ("telegram", "discord", "make", "pushover", "email", "n8n", "facebook")
 # Channels a system can alert on (a trigger can be left out of each one)
 SYSTEM_CHANNELS = ("telegram", "discord", "make", "pushover", "email", "n8n", "facebook")
-SYSTEM_INCLUDE_DEFAULT = {"pushover": 1}
+# New triggers are in the system's alert on every channel (migrations 030 / 032 saved the older defaults
+# for the triggers made before then)
+SYSTEM_INCLUDE_DEFAULT = {c: 1 for c in SYSTEM_CHANNELS}
 MAX_FIELDS = 25
 
 # Allowed config keys per channel (anything else is dropped on save)
@@ -81,6 +83,8 @@ DEFAULT_TEMPLATES: Dict[str, Dict[str, Any]] = {
                  "body": '{trigger_list} Alert at {timestamp_24}<br><br>{transcript}<br><br>'
                          '<a href="{audio_url}">Click for Dispatch Audio</a><br><br><a href="{stream_url}">Click Audio Stream</a>'},
     "facebook": {"message_body": "{trigger_list} Alert at {timestamp_24}\n\n{transcript}"},
+    # a group's Pushover alert (a trigger's own Pushover has its own table and editor)
+    "pushover": {"pushover_subject": "Dispatch Alert", "pushover_body": "{trigger_list}"},
 }
 _LIST_FIELDS = {"fields"}
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -116,6 +120,9 @@ def _system_templates(channel: str, system_row: Dict[str, Any]) -> Dict[str, Any
         return {"subject": s.get("email_alert_subject"), "body": s.get("email_alert_body")}
     if channel == "facebook":
         return {"message_body": s.get("message_body")}
+    if channel == "pushover":
+        return {"pushover_subject": s.get("subject") or s.get("pushover_subject"),
+                "pushover_body": s.get("body") or s.get("pushover_body")}
     return {}
 
 
@@ -253,8 +260,8 @@ def _clean_fields(channel: str, raw: Any) -> Tuple[List[Dict[str, Any]], Optiona
 
 def get_system_includes(db, trigger_ids: List[int]) -> Dict[int, Dict[str, int]]:
     """{trigger_id: {channel: 1|0}} - whether each trigger is in the system's alert on each channel.
-    With no saved choice a trigger is only in the system's Pushover alert (migration 030 saved the old
-    "in every alert" default for triggers made before then)."""
+    With no saved choice a trigger is in every one (migrations 030 / 032 saved the older defaults
+    for triggers made before then)."""
     ids = [int(i) for i in trigger_ids or []]
     out = {i: {c: SYSTEM_INCLUDE_DEFAULT.get(c, 0) for c in SYSTEM_CHANNELS} for i in ids}
     if not ids:
@@ -346,9 +353,14 @@ def _pick(trig_val: Any, sys_val: Any) -> Any:
     return trig_val if trig_val not in (None, "") else sys_val
 
 
-def layer_over_group(channel: str, cfg: Dict[str, Any], group_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """A trigger's own settings with its blank tokens / messages / background taken from its group's
-    (the system's are used after that, at send time). Where it goes and the on/off switches stay the trigger's."""
+def layer_over_group(channel: str, cfg: Dict[str, Any], group_cfg: Any) -> Dict[str, Any]:
+    """A trigger's own settings with its blank tokens / messages / background taken from its group's - or,
+    given a list (its groups, top first), from the first group that has one. The system's are used after
+    that, at send time. Where it goes and the on/off switches stay the trigger's."""
+    if isinstance(group_cfg, list):
+        for g in group_cfg:
+            cfg = layer_over_group(channel, cfg, g)
+        return cfg
     if not group_cfg:
         return cfg
     out = dict(cfg)
@@ -533,7 +545,8 @@ def dispatch_trigger_notifiers(db, system_row: Dict[str, Any], payload: Dict[str
                                transcript_text: Optional[str] = None, transcript_segments: Optional[list] = None,
                                tz: str, groups: Optional[Dict[int, Dict[str, Any]]] = None) -> int:
     """Send every enabled trigger-level notifier for the fired triggers. Returns how many were sent.
-    groups ({group id: {"group": row, "channels": {...}}}) fills a trigger's blank settings from its group's."""
+    groups ({group id: {"group": row, "channels": {...}, "member_ids": {...}}}) fills a trigger's blank settings
+    from its groups' (top group first)."""
     ids = [int(t["alert_trigger_id"]) for t in fired_trigger_data or [] if t.get("alert_trigger_id") is not None]
     if not ids:
         return 0
@@ -544,12 +557,13 @@ def dispatch_trigger_notifiers(db, system_row: Dict[str, Any], payload: Dict[str
         active = [c for c in CHANNELS if int((cfgs.get(c) or {}).get("enabled") or 0)]
         if not active:
             continue
-        group = (groups or {}).get(int(trig.get("alert_trigger_group_id") or 0)) or {}
+        mine = sorted((g for g in (groups or {}).values() if int(trig["alert_trigger_id"]) in g.get("member_ids", ())),
+                      key=lambda g: (int(g["group"].get("sort_order") or 0), str(g["group"].get("group_name") or "").lower()))
         ctx = trigger_context(system_row, payload, trig, detect_result=detect_result, transcript_text=transcript_text,
                               transcript_segments=transcript_segments, tz=tz)
-        ctx["group_name"] = (group.get("group") or {}).get("group_name") or ""
+        ctx["group_name"] = ", ".join(str(g["group"].get("group_name") or "") for g in mine)
         for ch in active:
-            cfg = layer_over_group(ch, cfgs[ch], (group.get("channels") or {}).get(ch))
+            cfg = layer_over_group(ch, cfgs[ch], [(g.get("channels") or {}).get(ch) for g in mine])
             ok, msg = send_channel(ch, cfg, system_row, ctx)
             module_logger.info("Trigger '%s' %s: %s", trig.get("alert_trigger_name"), ch, msg)
             sent += int(ok)
