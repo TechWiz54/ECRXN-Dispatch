@@ -17,6 +17,7 @@ from lib.email_module import EmailSender
 from lib.facebook_module import FacebookSender
 from lib.telegram_module import TelegramSender
 from lib.trigger_notifier_module import dispatch_trigger_notifiers, get_system_includes
+from lib.trigger_group_module import dispatch_group_notifiers, groups_for_triggers
 
 module_logger = logging.getLogger('icad_dispatch.dispatch_module')
 
@@ -191,14 +192,35 @@ def _dispatch_triggers(
 
     # ─────────────── Per-trigger notifiers (each trigger's own channels) ───────────────
     try:
+        groups = groups_for_triggers(db, fired_trigger_data)
+    except Exception:
+        module_logger.exception("Couldn't load the trigger groups")
+        groups = {}
+    try:
         n = dispatch_trigger_notifiers(
             db, system_row, payload, fired_trigger_data,
             detect_result=detect_result,
             transcript_text=transcript_text,
             transcript_segments=transcript_segments,
             tz=tz,
+            groups=groups,
         )
         if n:
             module_logger.info("Per-trigger notifications sent: %d", n)
     except Exception:
         module_logger.exception("Per-trigger notifier dispatch failed")
+
+    # ─────────────── Group notifiers (one alert per trigger group) ───────────────
+    try:
+        n = dispatch_group_notifiers(
+            db, system_row, payload, fired_trigger_data,
+            groups=groups,
+            detect_result=detect_result,
+            transcript_text=transcript_text,
+            transcript_segments=transcript_segments,
+            tz=tz,
+        )
+        if n:
+            module_logger.info("Group notifications sent: %d", n)
+    except Exception:
+        module_logger.exception("Group notifier dispatch failed")

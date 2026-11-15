@@ -49,6 +49,14 @@
                 </div>
             </div>
             <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label" for="updateTriggerGroup">Group:</label>
+                    {# no name: saved on its own as soon as it changes #}
+                    <select id="updateTriggerGroup" class="form-select"></select>
+                    <div class="form-text">The group's alerts (Notifiers on the group) include this trigger. Saved straight away.</div>
+                </div>
+            </div>
+            <div class="row">
                 <div class="col-md-3 mb-3" data-bs-toggle="tooltip" data-bs-placement="top"
                      title="Only fire if the call's talkgroup (decimal) matches this. Leave blank to match any talkgroup.">
                     <label class="form-label" for="updateTriggerTalkgroup">
@@ -273,7 +281,8 @@
         <p class="small text-body-secondary mb-3">
             For each channel, choose whether this trigger is part of the <strong>system's alert</strong>
             (set on the Radio Systems page) and whether it also sends <strong>its own alert</strong>, for example to
-            a station's own Discord channel. Blank tokens and messages use the system's.
+            a station's own Discord channel. If the trigger is in a <strong>group</strong>, the group's alerts include it
+            unless it sends its own on that channel. Blank tokens and messages use the group's, then the system's.
         </p>
 
         {# Channel cards are built by edit_triggers.js #}

@@ -4,6 +4,7 @@ When a trigger fires, ECRXN Dispatch can send alerts through **Telegram, Discord
 and n8n**.
 
 - [System and trigger alerts](#system-and-trigger-alerts) · [A trigger's Notifiers tab](#a-triggers-notifiers-tab)
+  · [Trigger groups](#trigger-groups)
 - [Sending the audio](#sending-the-audio-a-file-a-link-or-both) · [Facebook](#facebook) · [Placeholders](#placeholders)
 
 ---
@@ -13,9 +14,10 @@ and n8n**.
 | | Where | What it sends |
 |---|---|---|
 | **System alert** | **Radio Systems** → a system → its channel tabs | One alert per call, listing every trigger that fired |
+| **Group alert** | **Triggers** → a group (e.g. Fire, EMS) → **Notifiers** | One alert per call for the group, listing its triggers that fired |
 | **Trigger alert** | **Triggers** → a trigger → **Notifiers** | One alert for that trigger only, to its own channel, group, address or Page |
 
-Both can be on at once. For example, every station goes to the county's Pushover group through the system alert,
+They can all be on at once. For example, every station goes to the county's Pushover group through the system alert,
 while "Station 4 Fire" also goes to Station 4's own Discord channel.
 
 Every message box starts filled in with a working message, both on a system and on each trigger, so alerts make
@@ -54,6 +56,37 @@ own server, login and "from" address.
 
 In a trigger's own alert, `{trigger_list}` is just that trigger's name, and `{stream_url}` is the trigger's own
 stream URL if it has one.
+
+---
+
+## Trigger groups
+
+Group a system's triggers, say **Fire** and **EMS**, and each group sends its own alerts, with its own
+messages, channels and Facebook video background. For example, fire stations post to Facebook over a fire truck
+picture and EMS stations over an ambulance picture, from the same Page.
+
+**Set one up** (on the **Triggers** page):
+
+1. Click **Add group**, give it a name and a colour.
+2. Tick the triggers that belong in it (each trigger can be in one group). You can also pick a trigger's
+   **Group** on its General tab. The trigger list then shows each group with its triggers under it.
+3. Open the group's **Notifiers** tab and set up its alerts the same way as a trigger's: fill in where it goes,
+   **Send test**, **Save**, then switch on **Send this group's … alert**. Facebook has its own **Video background**.
+
+**How a group alert is sent:**
+
+- Once per call, when any of the group's triggers fire. `{trigger_list}` names the group's triggers that fired
+  (`Station 4 Fire, Station 12 Rescue`) and `{group_name}` the group (`Fire`). If fire and EMS triggers fire in
+  the same call, the Fire group and the EMS group each send their own.
+- A trigger that has **its own** alert on a channel sends that instead, and is left out of its group's alert on that
+  channel. Its Notifiers tab shows **Fire: in** or **Fire: own instead** for each channel.
+- Blank tokens and messages use the system's. In a trigger's own alert, blank ones use its group's first, then the
+  system's (and a trigger without its own Facebook background uses the group's).
+- The **system alert** is separate. If a trigger should only go out through its group, switch off its
+  **Include in the system's … alert** on that channel (new triggers are only in the system's Pushover alert).
+
+Deleting a group keeps its triggers, just without a group. A whole-system export includes the groups; triggers
+imported into another system come in without a group.
 
 ---
 
@@ -187,8 +220,9 @@ BMP, AVIF and more; up to **250 MB**) or a **clip** (MP4, MOV, WebM, MKV, AVI, W
 - pictures become a JPG up to 2160 px on the long side
 - clips become a silent 1080p MP4 of their first 60 seconds, which loops for the length of the call
 
-A **system background** is used by every trigger without its own; a **trigger background** replaces it for that
-trigger (say, an EMS picture for EMS stations). With neither, the video is black. Pictures are cropped to fill the
+A **system background** is used by every alert without its own; a [group](#trigger-groups) background replaces it
+for that group's alerts (say, an EMS picture for the EMS group), and a **trigger background** for that trigger's own
+alert. A trigger without its own uses its group's, then the system's. With none, the video is black. Pictures are cropped to fill the
 frame, so a 1080×1920 portrait picture looks best. **Preview video** shows the first 15 seconds of the latest call
 over the background before anything is posted.
 
@@ -221,6 +255,7 @@ value or post text. `{{trigger_list}}` works too. Anything that isn't a placehol
 | `{trigger_list}` | `Station 4 Fire, County EMS` | Triggers that fired, comma separated |
 | `{trigger_list_lines}` | `Station 4 Fire`<br>`County EMS` | One per line |
 | `{trigger_count}` | `2` | |
+| `{group_name}` | `Fire` | In a [group's alert](#trigger-groups), the group; in a trigger's own alert, its group (blank otherwise) |
 | `{trigger_names}` | `["Station 4 Fire", "County EMS"]` | A list, for JSON (n8n) |
 | `{system_name}` | `Demo County` | |
 | `{system_id}` | `1001` | The System ID your uploader sends |

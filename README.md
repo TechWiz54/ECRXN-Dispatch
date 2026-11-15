@@ -22,8 +22,8 @@ who need to know, with the audio.
 - **Triggers**: match a department's tones (optionally on one talkgroup) and alert only for the ones you care about.
 - **Tones without a trigger**: a dashboard view listing every tone heard that no trigger covers yet. One click
   turns it into a trigger.
-- **Alerts**: Telegram, Discord, Pushover, email, Facebook Pages, Make and n8n, for a whole system and for each
-  trigger on its own. Send the audio as a link, a file, or both. On Facebook, a video or Reel over your own background.
+- **Alerts**: Telegram, Discord, Pushover, email, Facebook Pages, Make and n8n, for a whole system, for each
+  group of triggers (e.g. Fire and EMS, each with its own Facebook background) and for each trigger on its own. Send the audio as a link, a file, or both. On Facebook, a video or Reel over your own background.
 - **Ready-made messages**: every alert starts with a working message, plus [placeholders](docs/alerts.md#placeholders)
   for the departments, time, transcript, address and more.
 - **Backup and copying**: download a whole system (settings, triggers, alerts) as one file and import it anywhere.

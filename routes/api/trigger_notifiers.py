@@ -22,7 +22,7 @@ from lib.system_module import get_systems, update_system_facebook_settings, set_
 from lib.trigger_notifier_module import (
     CHANNELS, SYSTEM_CHANNELS, get_trigger_notifiers, save_trigger_notifier, clean_channel_config,
     send_channel, trigger_context, get_system_includes, set_system_include, set_trigger_facebook_background,
-    fill_template_defaults,
+    fill_template_defaults, layer_over_group,
 )
 from routes.api.systems import api_systems
 from routes.decorators import login_required, csrf_protect
@@ -69,6 +69,14 @@ def _system_summary(system: dict) -> dict:
     }
 
 
+def _trigger_group(db, trigger: dict):
+    """(group row, {channel: settings}) for the trigger's group, or (None, {})."""
+    from lib.trigger_group_module import get_group, get_group_notifiers
+    gid = int(trigger.get("alert_trigger_group_id") or 0)
+    group = get_group(db, trigger["radio_system_id"], gid) if gid else None
+    return (group, get_group_notifiers(db, [gid])[gid]) if group else (None, {})
+
+
 def _test_payload(db, system: dict, trigger: dict) -> dict:
     """Use the system's latest call for the audio link so the test looks like a real alert."""
     rsid = system["radio_system_id"]
@@ -97,14 +105,17 @@ def _test_payload(db, system: dict, trigger: dict) -> dict:
 @login_required
 def trigger_notifiers_get(radio_system_id: int, alert_trigger_id: int):
     db = current_app.config["db"]
-    _trigger_or_404(db, radio_system_id, alert_trigger_id)
+    trigger = _trigger_or_404(db, radio_system_id, alert_trigger_id)
     system = _system_or_404(db, radio_system_id)
     channels = fill_template_defaults(get_trigger_notifiers(db, alert_trigger_id), system)
+    group, gch = _trigger_group(db, trigger)
     return jsonify(success=True, message="OK", result={
         "channels": channels,
         "facebook_background": _bg_info(channels["facebook"].get("background")),
         "system": _system_summary(system),
         "system_includes": get_system_includes(db, [alert_trigger_id])[alert_trigger_id],
+        # the trigger's group: which of its alerts are on (this trigger is in them unless it sends its own)
+        "group": dict(group, facebook_background=_bg_info(gch["facebook"].get("background"))) if group else None,
     }), 200
 
 
@@ -148,6 +159,8 @@ def trigger_notifier_test(radio_system_id: int, alert_trigger_id: int, channel: 
                           tz=current_app.config["TIMEZONE"])
     ctx["trigger_list"] = f"[TEST] {ctx.get('trigger_list') or trigger.get('alert_trigger_name')}"
     ctx["is_test"] = True
+    group, gch = _trigger_group(db, trigger)
+    ctx["group_name"] = (group or {}).get("group_name") or ""
 
     if channel == "pushover":
         po = get_pushover_settings(db, alert_trigger_id).get("result") or {}
@@ -164,6 +177,9 @@ def trigger_notifier_test(radio_system_id: int, alert_trigger_id: int, channel: 
     cfg, _enabled, err = clean_channel_config(channel, dict(data, enabled=1))
     if err:
         return jsonify(success=False, message=err, result=[]), 400
+    if channel == "facebook":
+        cfg["background"] = get_trigger_notifiers(db, alert_trigger_id)["facebook"].get("background") or ""
+    cfg = layer_over_group(channel, cfg, gch.get(channel))
     if channel == "telegram" and int(cfg.get("send_audio") or 0) and not ctx.get("audio_url"):
         return jsonify(success=False, message="A voice-message test needs at least one call on this system "
                                               "(or turn off \"Send the audio\" to test a text message).", result=[]), 400
@@ -225,7 +241,7 @@ def systems_facebook_test(radio_system_id: int):
 #   system : /api/systems/<sys>/facebook/background                 GET | POST | DELETE
 #   trigger: /api/systems/<sys>/triggers/<id>/facebook/background   GET | POST | DELETE
 #   preview: .../facebook/preview   POST -> short MP4 made from the latest call's audio
-# A trigger's background wins over the system's; with neither, the video is black.
+# A trigger's background wins over its group's, then the system's; with none, the video is black.
 # ──────────────────────────────────────────────────────────────────────
 def _bg_info(name):
     return background_info(name)
@@ -324,7 +340,9 @@ def systems_facebook_preview(radio_system_id: int):
 @csrf_protect
 def trigger_facebook_preview(radio_system_id: int, alert_trigger_id: int):
     db = current_app.config["db"]
-    _trigger_or_404(db, radio_system_id, alert_trigger_id)
+    trigger = _trigger_or_404(db, radio_system_id, alert_trigger_id)
     system = _system_or_404(db, radio_system_id)
     own = get_trigger_notifiers(db, alert_trigger_id)["facebook"].get("background")
-    return _preview(system, own or (system.get("facebook") or {}).get("background"))
+    _group, gch = _trigger_group(db, trigger)
+    group_bg = (gch.get("facebook") or {}).get("background")
+    return _preview(system, own or group_bg or (system.get("facebook") or {}).get("background"))

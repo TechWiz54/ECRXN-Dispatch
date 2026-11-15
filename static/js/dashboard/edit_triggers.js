@@ -40,6 +40,10 @@ let isSaving = false;              // saving-in-flight flag (UI hint)
 /** Current selected IDs */
 let curSys  = null;
 let curTrig = null;
+let curGroup = null;               // the group open in the group editor
+
+/** Trigger groups of the current system */
+let groupRows = [];
 
 /** Hide trigger picklist until a system is chosen */
 trigGrp.classList.add("d-none");
@@ -310,11 +314,12 @@ async function populateTriggersForSystem(systemId) {
     toggleEditor(false);
     rememberSystem(curSys);
 
-    if (!curSys) { triggerRows = []; renderTriggerList(); return; }
+    if (!curSys) { triggerRows = []; groupRows = []; renderGroups(); renderTriggerList(); return; }
 
-    const rsp = await apiJson(`/api/systems/${curSys}/triggers?full=1`);
+    const [rsp] = await Promise.all([apiJson(`/api/systems/${curSys}/triggers?full=1`), loadGroups()]);
     if (!rsp.success) { showAlert(rsp.message, "danger"); return; }
     triggerRows = rsp.result || [];
+    renderGroups();
     renderTriggerList();
 
     rsp.result.forEach(t =>
@@ -379,6 +384,7 @@ function populateEditor(t) {
     document.getElementById("updateTriggerIgnore").value    = t.alert_trigger_ignore_time;
     document.getElementById("updateTriggerTol").value       = t.alert_trigger_tone_tolerance;
     document.getElementById("updateTriggerTalkgroup").value = t.alert_trigger_talkgroup ?? "";
+    trigGroupSel.value = t.alert_trigger_group_id != null ? String(t.alert_trigger_group_id) : "";
 
     // Legacy single-value tone fields (kept for compatibility)
     const map = {
@@ -412,9 +418,10 @@ function populateEditor(t) {
  */
 async function reloadTriggerSelect(selectId = null) {
     trigSel.innerHTML = `<option value="">Select Trigger</option>`;
-    const rsp = await apiJson(`/api/systems/${curSys}/triggers?full=1`);
+    const [rsp] = await Promise.all([apiJson(`/api/systems/${curSys}/triggers?full=1`), loadGroups()]);
     if (!rsp.success) return;
     triggerRows = rsp.result || [];
+    renderGroups();
     renderTriggerList();
 
     rsp.result.forEach(t =>
@@ -1360,45 +1367,65 @@ function renderTriggerList() {
     noMatch.classList.toggle("d-none", rows.length > 0);
     listWrap.classList.toggle("d-none", rows.length === 0);
 
-    listBody.innerHTML = rows.map(t => {
-        const id = t.alert_trigger_id;
-        const on = +(t.alert_trigger_enabled ?? 1) === 1;
-        const badges = toneBadges(t);
-        const tones = badges.length
-            ? badges.map(([kind, label]) => `<span class="badge trig-tone trig-tone-${kind}">${esc(label)}</span>`).join(" ")
-            : `<span class="text-secondary small">No tone rules</span>`;
-        const match = badges.length > 1 ? (t.alert_trigger_type === "OR" ? "Any rule" : "All rules") : "—";
-        const firedTitle = t.last_fired_at ? new Date(t.last_fired_at * 1000).toLocaleString() : "";
-        return `
-        <tr data-trigger-id="${id}" class="${on ? "" : "trig-off"}">
-          <td class="fw-semibold trig-c-name">${esc(t.alert_trigger_name)}</td>
-          <td class="trig-c-tg" data-label="Talkgroup">${t.alert_trigger_talkgroup != null ? esc(t.alert_trigger_talkgroup) : `<span class="text-secondary">Any</span>`}</td>
-          <td class="trig-tones trig-c-tones">${tones}</td>
-          <td class="d-none d-lg-table-cell text-secondary small">${match}</td>
-          <td class="d-none d-md-table-cell text-secondary small trig-c-fired" title="${esc(firedTitle)}">${timeAgo(t.last_fired_at)}</td>
-          <td class="text-nowrap trig-no-open trig-c-status">
-            <div class="form-check form-switch d-inline-block m-0">
-              <input class="form-check-input" type="checkbox" role="switch" data-act="toggle"
-                     ${on ? "checked" : ""} aria-label="Enable or disable trigger">
-            </div>
-            <span class="trig-status ${on ? "trig-status-on" : ""}">${on ? "Enabled" : "Disabled"}</span>
-          </td>
-          <td class="text-end trig-no-open trig-c-menu">
-            <div class="dropdown">
-              <button class="btn btn-sm btn-link text-secondary trig-menu-btn" type="button"
-                      data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" aria-label="Trigger actions">
-                <i class="bi bi-three-dots-vertical"></i>
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="#" data-act="edit"><i class="bi bi-pencil me-2"></i>Edit</a></li>
-                <li><a class="dropdown-item" href="#" data-act="toggle-menu"><i class="bi bi-power me-2"></i>${on ? "Disable" : "Enable"}</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item text-danger" href="#" data-act="delete"><i class="bi bi-trash me-2"></i>Delete</a></li>
-              </ul>
-            </div>
+    // With groups: a heading row per group (click = edit the group), then its triggers; ungrouped ones last
+    const searching = !!searchEl.value.trim();
+    const sections = groupRows.length
+        ? [...groupRows.map(g => ({ g, rows: rows.filter(t => String(t.alert_trigger_group_id) === String(g.alert_trigger_group_id)) })),
+           { g: null, rows: rows.filter(t => !groupById(t.alert_trigger_group_id)) }]
+        : [{ g: null, rows, plain: true }];
+    const head = ({ g, rows: r }) => `
+        <tr class="trig-group-head" data-group-head="${g ? g.alert_trigger_group_id : ""}">
+          <td colspan="7">
+            <span class="grp-dot" style="background:${esc(g ? g.group_color : "transparent")}"></span>
+            <span class="fw-semibold">${esc(g ? g.group_name : "No group")}</span>
+            <span class="text-secondary small ms-1">${r.length} trigger${r.length === 1 ? "" : "s"}</span>
+            ${g ? `<span class="grp-head-edit small ms-2"><i class="bi bi-pencil"></i> Edit group</span>` : ""}
           </td>
         </tr>`;
-    }).join("");
+    listBody.innerHTML = sections
+        .filter(sec => sec.plain || sec.rows.length || (sec.g && !searching))
+        .map(sec => (sec.plain ? "" : head(sec)) + sec.rows.map(triggerRowHtml).join("")).join("");
+}
+
+/** One trigger's row in the list */
+function triggerRowHtml(t) {
+    const id = t.alert_trigger_id;
+    const on = +(t.alert_trigger_enabled ?? 1) === 1;
+    const badges = toneBadges(t);
+    const tones = badges.length
+        ? badges.map(([kind, label]) => `<span class="badge trig-tone trig-tone-${kind}">${esc(label)}</span>`).join(" ")
+        : `<span class="text-secondary small">No tone rules</span>`;
+    const match = badges.length > 1 ? (t.alert_trigger_type === "OR" ? "Any rule" : "All rules") : "—";
+    const firedTitle = t.last_fired_at ? new Date(t.last_fired_at * 1000).toLocaleString() : "";
+    return `
+    <tr data-trigger-id="${id}" class="${on ? "" : "trig-off"}">
+      <td class="fw-semibold trig-c-name">${esc(t.alert_trigger_name)}</td>
+      <td class="trig-c-tg" data-label="Talkgroup">${t.alert_trigger_talkgroup != null ? esc(t.alert_trigger_talkgroup) : `<span class="text-secondary">Any</span>`}</td>
+      <td class="trig-tones trig-c-tones">${tones}</td>
+      <td class="d-none d-lg-table-cell text-secondary small">${match}</td>
+      <td class="d-none d-md-table-cell text-secondary small trig-c-fired" title="${esc(firedTitle)}">${timeAgo(t.last_fired_at)}</td>
+      <td class="text-nowrap trig-no-open trig-c-status">
+        <div class="form-check form-switch d-inline-block m-0">
+          <input class="form-check-input" type="checkbox" role="switch" data-act="toggle"
+                 ${on ? "checked" : ""} aria-label="Enable or disable trigger">
+        </div>
+        <span class="trig-status ${on ? "trig-status-on" : ""}">${on ? "Enabled" : "Disabled"}</span>
+      </td>
+      <td class="text-end trig-no-open trig-c-menu">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-link text-secondary trig-menu-btn" type="button"
+                  data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" aria-label="Trigger actions">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" data-act="edit"><i class="bi bi-pencil me-2"></i>Edit</a></li>
+            <li><a class="dropdown-item" href="#" data-act="toggle-menu"><i class="bi bi-power me-2"></i>${on ? "Disable" : "Enable"}</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="#" data-act="delete"><i class="bi bi-trash me-2"></i>Delete</a></li>
+          </ul>
+        </div>
+      </td>
+    </tr>`;
 }
 
 /** Open a trigger in the side panel */
@@ -1419,6 +1446,11 @@ async function setTriggerEnabled(id, on) {
 }
 
 listBody.addEventListener("click", ev => {
+    const groupHead = ev.target.closest("tr[data-group-head]");
+    if (groupHead) {
+        if (groupHead.dataset.groupHead) openGroup(groupHead.dataset.groupHead);
+        return;
+    }
     const row = ev.target.closest("tr[data-trigger-id]");
     if (!row) return;
     const id = row.dataset.triggerId;
@@ -1486,8 +1518,6 @@ renderTriggerList();
        Pushover, Email, n8n, Facebook)
    ===================================================================*/
 
-const notifAcc = document.getElementById("notifierAcc");
-const notifCount = document.getElementById("notifierOnCount");
 const TEMPLATE_HELP = "Placeholders: {trigger_list}, {timestamp_readable}, {timestamp_24}, {talkgroup_id}, {transcript}, {address}, {incident_type}, {audio_url}, {stream_url}, {system_name} (full list: docs/alerts.md → Placeholders)";
 const PUSHOVER_SOUNDS = ["pushover", "bike", "bugle", "cashregister", "classical", "cosmic", "falling", "gamelan", "incoming",
     "intermission", "magic", "mechanical", "pianobar", "siren", "spacealarm", "tugboat", "alien", "climb", "persistent",
@@ -1571,22 +1601,8 @@ const NOTIFIERS = [
     ], note: "Posts to a Facebook Page (Facebook doesn't let apps post to personal profiles). Use a system-user token from your Meta business portfolio, set to never expire, with pages_show_list, pages_manage_posts, pages_read_engagement and business_management. Step by step: docs/alerts.md → Facebook." },
 ];
 
-let notifState = null;   // { channels: {ch: cfg}, system: {...}, system_includes: {ch: 0|1}, pushover: {...} }
-
-const fieldId = (ch, k) => `nf-${ch}-${k}`;
 const resolve = (v, sys) => (typeof v === "function" ? v(sys) : v) ?? "";
 const notifDef = ch => NOTIFIERS.find(x => x.key === ch);
-
-function notifValues(ch) {
-    if (ch === "pushover") {
-        const p = notifState.pushover || {};
-        const sys = notifState.system || {};
-        return { ...p, enabled: +(p.enable_pushover || 0),
-                 pushover_subject: p.pushover_subject || sys.pushover_subject || "",
-                 pushover_body: p.pushover_body || sys.pushover_body || "" };
-    }
-    return notifState.channels[ch] || {};
-}
 
 function rowHtml(f, row = {}) {
     const cells = f.cols.map(c =>
@@ -1600,12 +1616,12 @@ function rowHtml(f, row = {}) {
             <i class="bi bi-x-lg"></i></button></div>`;
 }
 
-function fieldHtml(ch, f, sys) {
-    const id = fieldId(ch, f.k);
+/** One field of a channel card. id = the element id to use; who = "this trigger's" / "this group's" */
+function fieldHtml(id, f, sys, who) {
     const ph = esc(resolve(f.ph, sys));
     const helpText = resolve(f.help, sys);
     const help = helpText ? `<div class="form-text">${esc(helpText)}</div>` : "";
-    const req = f.required ? ` <span class="text-danger" title="Needed to turn on this trigger's own alert">*</span>` : "";
+    const req = f.required ? ` <span class="text-danger" title="Needed to turn on ${esc(who)} own alert">*</span>` : "";
     const col = f.col === 6 ? "col-12 col-md-6" : "col-12";
     const label = `<label class="form-label" for="${id}">${esc(f.label)}${req}</label>`;
     let input;
@@ -1647,47 +1663,83 @@ function fieldHtml(ch, f, sys) {
     return `<div class="${col}">${label}${input}${help}</div>`;
 }
 
-function renderNotifiers() {
-    const sys = notifState.system || {};
-    notifAcc.innerHTML = NOTIFIERS.map(n => {
-        const plain = n.fields.filter(f => !f.group);
-        const groups = [...new Set(n.fields.filter(f => f.group).map(f => f.group))];
-        // a group sits right after the switch that reveals it
-        const groupHtml = g => `<div class="col-12 notif-group" data-group="${g}">
-                <div class="row g-3">${n.fields.filter(f => f.group === g).map(f => fieldHtml(n.key, f, sys)).join("")}</div></div>`;
-        const body = plain.map(f => fieldHtml(n.key, f, sys) + (f.reveals && groups.includes(f.reveals) ? groupHtml(f.reveals) : "")).join("");
-        const note = resolve(n.note, sys);
-        const sysOn = !!(sys.enabled || {})[n.key];
-        return `<div class="accordion-item notif-item" data-ch="${n.key}">
+/**
+ * The channel cards (Telegram, Discord, Make, Pushover, Email, n8n, Facebook) for a trigger or a group.
+ *   kind "trigger": include-in-system switch + own alert; shows whether its group's alert covers it.
+ *   kind "group":   the group's alert (one per call, naming the group's fired triggers).
+ */
+function makeNotifierEditor({ kind, acc, countEl, errEl }) {
+    const isGroup = kind === "group";
+    const who = isGroup ? "this group's" : "this trigger's";
+    const prefix = isGroup ? "gnf" : "nf";
+    const ownerId = () => (isGroup ? curGroup : curTrig);
+    const base = () => `/api/systems/${curSys}/${isGroup ? `trigger-groups/${curGroup}` : `triggers/${curTrig}`}`;
+    const fieldId = (ch, k) => `${prefix}-${ch}-${k}`;
+    let st = null;   // { channels: {ch: cfg}, system: {...}, system_includes, pushover, group, facebook_background }
+
+    function values(ch) {
+        const sys = st.system || {};
+        if (ch === "pushover") {
+            const p = isGroup ? (st.channels.pushover || {}) : { ...(st.pushover || {}), enabled: +((st.pushover || {}).enable_pushover || 0) };
+            return { ...p, pushover_subject: p.pushover_subject || sys.pushover_subject || "",
+                     pushover_body: p.pushover_body || sys.pushover_body || "" };
+        }
+        return st.channels[ch] || {};
+    }
+
+    /** Trigger mode: is this channel's alert on for the trigger's group? */
+    const groupOn = ch => !isGroup && !!st.group && (st.group.channels_on || []).includes(ch);
+
+    function render() {
+        const sys = st.system || {};
+        acc.innerHTML = NOTIFIERS.map(n => {
+            const plain = n.fields.filter(f => !f.group);
+            const groups = [...new Set(n.fields.filter(f => f.group).map(f => f.group))];
+            const fh = f => fieldHtml(fieldId(n.key, f.k), f, sys, who);
+            // a group of fields sits right after the switch that reveals it
+            const groupHtml = g => `<div class="col-12 notif-group" data-group="${g}">
+                <div class="row g-3">${n.fields.filter(f => f.group === g).map(fh).join("")}</div></div>`;
+            const body = plain.map(f => fh(f) + (f.reveals && groups.includes(f.reveals) ? groupHtml(f.reveals) : "")).join("");
+            const note = resolve(n.note, sys);
+            const sysOn = !!(sys.enabled || {})[n.key];
+            const switches = isGroup
+                ? `<div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="${fieldId(n.key, "enabled")}" name="enabled">
+                        <label class="form-check-label" for="${fieldId(n.key, "enabled")}">Send this group's ${esc(n.name)} alert</label>
+                        <div class="form-text mt-0">One alert per call, naming the group's triggers that fired. A trigger with
+                            its own ${esc(n.name)} alert sends that instead.</div>
+                   </div>`
+                : `<div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="${fieldId(n.key, "system")}" name="include_system">
+                        <label class="form-check-label" for="${fieldId(n.key, "system")}">Include in the system's ${esc(n.name)} alert</label>
+                        <div class="form-text mt-0">${sysOn
+                            ? `The system's ${esc(n.name)} alert is on.`
+                            : `The system's ${esc(n.name)} alert is off (Radio Systems → ${esc(n.name)}), so nothing is sent there yet.`}</div>
+                   </div>
+                   <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="${fieldId(n.key, "enabled")}" name="enabled">
+                        <label class="form-check-label" for="${fieldId(n.key, "enabled")}">Send this trigger's own ${esc(n.name)} alert</label>
+                        <div class="form-text mt-0">Uses the settings below.</div>
+                   </div>
+                   <div class="form-text notif-group-note d-none" data-group-note></div>`;
+            return `<div class="accordion-item notif-item" data-ch="${n.key}">
             <h2 class="accordion-header">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#nf-pane-${n.key}" aria-expanded="false">
+                        data-bs-target="#${prefix}-pane-${n.key}" aria-expanded="false">
                     <i class="bi ${n.icon} notif-icon notif-icon-${n.key}"></i>
                     <span class="notif-name">${esc(n.name)}</span>
                     <span class="notif-badges ms-auto">
                         <span class="notif-sys-badge" data-sys-status></span>
+                        <span class="notif-grp-badge" data-grp-status></span>
                         <span class="notif-status" data-status></span>
                     </span>
                 </button>
             </h2>
-            <div id="nf-pane-${n.key}" class="accordion-collapse collapse" data-bs-parent="#notifierAcc">
+            <div id="${prefix}-pane-${n.key}" class="accordion-collapse collapse" data-bs-parent="#${acc.id}">
                 <div class="accordion-body">
                     <form class="notif-form" data-ch="${n.key}" novalidate>
-                        <div class="notif-switches">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="${fieldId(n.key, "system")}" name="include_system">
-                                <label class="form-check-label" for="${fieldId(n.key, "system")}">Include in the system's ${esc(n.name)} alert</label>
-                                <div class="form-text mt-0">${sysOn
-                                    ? `The system's ${esc(n.name)} alert is on.`
-                                    : `The system's ${esc(n.name)} alert is off (Radio Systems → ${esc(n.name)}), so nothing is sent there yet.`}</div>
-                            </div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="${fieldId(n.key, "enabled")}" name="enabled">
-                                <label class="form-check-label" for="${fieldId(n.key, "enabled")}">Send this trigger's own ${esc(n.name)} alert</label>
-                                <div class="form-text mt-0">Uses the settings below.</div>
-                            </div>
-                        </div>
-                        <h6 class="notif-own-title">This trigger's own alert</h6>
+                        <div class="notif-switches">${switches}</div>
+                        <h6 class="notif-own-title">${isGroup ? "This group's alert" : "This trigger's own alert"}</h6>
                         ${note ? `<p class="small text-body-secondary mb-3">${esc(note)}</p>` : ""}
                         <div class="row g-3">${body}</div>
                         <div class="d-flex flex-wrap gap-2 mt-3">
@@ -1699,254 +1751,472 @@ function renderNotifiers() {
                 </div>
             </div>
         </div>`;
-    }).join("");
-    NOTIFIERS.forEach(n => fillNotifier(n.key));
-    updateNotifierCount();
-}
-
-function fillNotifier(ch) {
-    const n = notifDef(ch);
-    const v = notifValues(ch);
-    const form = notifAcc.querySelector(`form[data-ch="${ch}"]`);
-    form.elements.enabled.checked = +(v.enabled || 0) === 1;
-    form.elements.include_system.checked = +((notifState.system_includes || {})[ch] ?? 1) === 1;
-    for (const f of n.fields) {
-        if (f.type === "fbbg") {
-            mountFacebookBg(form);
-            continue;
-        }
-        if (f.type === "rows") {
-            const box = form.querySelector(`[data-rows="${f.k}"].notif-rows`);
-            box.innerHTML = (Array.isArray(v[f.k]) ? v[f.k] : []).map(r => rowHtml(f, r)).join("");
-            continue;
-        }
-        const el = form.elements[f.k];
-        if (!el) continue;
-        if (f.type === "switch") {
-            el.checked = f.on ? v[f.k] === f.on : +(v[f.k] || 0) === 1;
-            if (f.reveals) revealGroup(el);
-            continue;
-        }
-        else el.value = v[f.k] ?? (f.type === "select" ? f.options[0][0] : "");
-        if (f.type === "color" && /^#?[0-9a-f]{6}$/i.test(el.value)) {
-            form.querySelector(`[data-color-for="${el.id}"]`).value = el.value.startsWith("#") ? el.value : `#${el.value}`;
-        }
+        }).join("");
+        NOTIFIERS.forEach(n => fill(n.key));
+        updateCount();
     }
-    setNotifierStatus(ch);
-}
 
-/** Facebook card: background picker (this trigger's image / clip, else the system's), only for video posts */
-function mountFacebookBg(form) {
-    const base = `/api/systems/${curSys}`;
-    const sysBg = (notifState.system || {}).facebook_background || null;
-    FbBackground.mount(form.querySelector("[data-fbbg]"), {
-        url: `${base}/triggers/${curTrig}/facebook/background`,
-        previewUrl: `${base}/triggers/${curTrig}/facebook/preview`,
-        own: notifState.facebook_background || null,
-        fallback: sysBg,
-        fallbackUrl: `${base}/facebook/background`,
-        ownLabel: "this trigger's",
-        fallbackLabel: "the system's",
-        csrf: getCsrfToken,
-        onChange: info => { notifState.facebook_background = info; },
-    });
-    toggleFacebookBg(form);
-}
+    function fill(ch) {
+        const n = notifDef(ch);
+        const v = values(ch);
+        const form = acc.querySelector(`form[data-ch="${ch}"]`);
+        form.elements.enabled.checked = +(v.enabled || 0) === 1;
+        if (!isGroup) form.elements.include_system.checked = +((st.system_includes || {})[ch] ?? 1) === 1;
+        for (const f of n.fields) {
+            if (f.type === "fbbg") {
+                mountFacebookBg(form);
+                continue;
+            }
+            if (f.type === "rows") {
+                const box = form.querySelector(`[data-rows="${f.k}"].notif-rows`);
+                box.innerHTML = (Array.isArray(v[f.k]) ? v[f.k] : []).map(r => rowHtml(f, r)).join("");
+                continue;
+            }
+            const el = form.elements[f.k];
+            if (!el) continue;
+            if (f.type === "switch") {
+                el.checked = f.on ? v[f.k] === f.on : +(v[f.k] || 0) === 1;
+                if (f.reveals) revealGroup(el);
+                continue;
+            }
+            else el.value = v[f.k] ?? (f.type === "select" ? f.options[0][0] : "");
+            if (f.type === "color" && /^#?[0-9a-f]{6}$/i.test(el.value)) {
+                form.querySelector(`[data-color-for="${el.id}"]`).value = el.value.startsWith("#") ? el.value : `#${el.value}`;
+            }
+        }
+        setStatus(ch);
+    }
 
-function revealGroup(sw) {
-    sw.form.querySelector(`[data-group="${sw.dataset.reveals}"]`)?.classList.toggle("d-none", !sw.checked);
-}
+    /** Facebook card: background picker (own image / clip, else the group's, else the system's), only for video posts */
+    function mountFacebookBg(form) {
+        const sysBase = `/api/systems/${curSys}`;
+        const groupBg = !isGroup && st.group ? st.group.facebook_background : null;
+        FbBackground.mount(form.querySelector("[data-fbbg]"), {
+            url: `${base()}/facebook/background`,
+            previewUrl: `${base()}/facebook/preview`,
+            own: st.facebook_background || null,
+            fallback: groupBg || (st.system || {}).facebook_background || null,
+            fallbackUrl: groupBg ? `${sysBase}/trigger-groups/${st.group.alert_trigger_group_id}/facebook/background`
+                                 : `${sysBase}/facebook/background`,
+            ownLabel: who,
+            fallbackLabel: groupBg ? `the ${st.group.group_name} group's` : "the system's",
+            csrf: getCsrfToken,
+            onChange: info => { st.facebook_background = info; },
+        });
+        toggleFacebookBg(form);
+    }
 
-function toggleFacebookBg(form) {
-    form.querySelector("[data-fbbg-wrap]").classList.toggle("d-none", !form.elements.post_type.checked);
-}
+    function revealGroup(sw) {
+        sw.form.querySelector(`[data-group="${sw.dataset.reveals}"]`)?.classList.toggle("d-none", !sw.checked);
+    }
 
-function setNotifierStatus(ch) {
-    const n = notifDef(ch);
-    const v = notifValues(ch);
-    const item = notifAcc.querySelector(`.notif-item[data-ch="${ch}"]`);
-    const badge = item.querySelector("[data-status]");
-    const on = +(v.enabled || 0) === 1;
-    const setUp = !!String(v[n.dest] ?? "").trim();
-    badge.className = "notif-status badge rounded-pill " +
-        (on ? "text-bg-success" : setUp ? "text-bg-secondary" : "notif-status-empty");
-    badge.textContent = on ? "Own: on" : setUp ? "Own: off" : "Own: not set up";
+    function toggleFacebookBg(form) {
+        form.querySelector("[data-fbbg-wrap]").classList.toggle("d-none", !form.elements.post_type.checked);
+    }
 
-    // System badge: only shown when the system's channel is on
-    const sysBadge = item.querySelector("[data-sys-status]");
-    const sysOn = !!((notifState.system || {}).enabled || {})[ch];
-    const included = +((notifState.system_includes || {})[ch] ?? 1) === 1;
-    sysBadge.className = "notif-sys-badge badge rounded-pill " + (!sysOn ? "d-none" : included ? "notif-sys-in" : "notif-sys-out");
-    sysBadge.textContent = included ? "System: in" : "System: left out";
-}
+    function setStatus(ch) {
+        const n = notifDef(ch);
+        const v = values(ch);
+        const item = acc.querySelector(`.notif-item[data-ch="${ch}"]`);
+        const badge = item.querySelector("[data-status]");
+        const on = +(v.enabled || 0) === 1;
+        const setUp = !!String(v[n.dest] ?? "").trim();
+        const word = isGroup ? "Group" : "Own";
+        badge.className = "notif-status badge rounded-pill " +
+            (on ? "text-bg-success" : setUp ? "text-bg-secondary" : "notif-status-empty");
+        badge.textContent = on ? `${word}: on` : setUp ? `${word}: off` : `${word}: not set up`;
 
-function updateNotifierCount() {
-    const on = NOTIFIERS.filter(n => +(notifValues(n.key).enabled || 0) === 1).length;
-    notifCount.textContent = on;
-    notifCount.classList.toggle("d-none", on === 0);
-    notifCount.title = `${on} own alert${on === 1 ? "" : "s"} on`;
-}
+        const sysBadge = item.querySelector("[data-sys-status]");
+        const grpBadge = item.querySelector("[data-grp-status]");
+        if (isGroup) {
+            sysBadge.className = grpBadge.className = "d-none";
+            return;
+        }
+        // System badge: only shown when the system's channel is on
+        const sysOn = !!((st.system || {}).enabled || {})[ch];
+        const included = +((st.system_includes || {})[ch] ?? 1) === 1;
+        sysBadge.className = "notif-sys-badge badge rounded-pill " + (!sysOn ? "d-none" : included ? "notif-sys-in" : "notif-sys-out");
+        sysBadge.textContent = included ? "System: in" : "System: left out";
 
-function readNotifierForm(form) {
-    const n = notifDef(form.dataset.ch);
-    const out = { enabled: form.elements.enabled.checked ? 1 : 0 };
-    for (const f of n.fields) {
-        if (f.type === "fbbg") continue;            // uploaded separately
-        if (f.type === "rows") {
-            out[f.k] = [...form.querySelectorAll(`.notif-rows[data-rows="${f.k}"] .notif-row`)].map(r => {
-                const row = {};
-                r.querySelectorAll("[data-col]").forEach(el => {
-                    row[el.dataset.col] = el.type === "checkbox" ? (el.checked ? 1 : 0) : el.value.trim();
+        // Group badge + note: only shown when the trigger's group sends on this channel
+        const gOn = groupOn(ch);
+        const gName = st.group ? st.group.group_name : "";
+        grpBadge.className = "notif-grp-badge badge rounded-pill " + (!gOn ? "d-none" : on ? "notif-sys-out" : "notif-sys-in");
+        grpBadge.textContent = `${gName}: ${on ? "own instead" : "in"}`;
+        const note = item.querySelector("[data-group-note]");
+        note.classList.toggle("d-none", !gOn);
+        note.textContent = !gOn ? "" : on
+            ? `This trigger sends its own ${n.name} alert, so it's left out of the ${gName} group's.`
+            : `This trigger is in the ${gName} group's ${n.name} alert.`;
+    }
+
+    function updateCount() {
+        const on = NOTIFIERS.filter(n => +(values(n.key).enabled || 0) === 1).length;
+        countEl.textContent = on;
+        countEl.classList.toggle("d-none", on === 0);
+        countEl.title = `${on} ${isGroup ? "group" : "own"} alert${on === 1 ? "" : "s"} on`;
+    }
+
+    function readForm(form) {
+        const n = notifDef(form.dataset.ch);
+        const out = { enabled: form.elements.enabled.checked ? 1 : 0 };
+        for (const f of n.fields) {
+            if (f.type === "fbbg") continue;            // uploaded separately
+            if (f.type === "rows") {
+                out[f.k] = [...form.querySelectorAll(`.notif-rows[data-rows="${f.k}"] .notif-row`)].map(r => {
+                    const row = {};
+                    r.querySelectorAll("[data-col]").forEach(el => {
+                        row[el.dataset.col] = el.type === "checkbox" ? (el.checked ? 1 : 0) : el.value.trim();
+                    });
+                    return row;
                 });
-                return row;
-            });
-            continue;
+                continue;
+            }
+            const el = form.elements[f.k];
+            if (el) out[f.k] = f.type === "switch" ? (f.on ? (el.checked ? f.on : f.off) : (el.checked ? 1 : 0)) : el.value.trim();
         }
-        const el = form.elements[f.k];
-        if (el) out[f.k] = f.type === "switch" ? (f.on ? (el.checked ? f.on : f.off) : (el.checked ? 1 : 0)) : el.value.trim();
+        return out;
     }
-    return out;
-}
 
-async function loadNotifiers() {
-    if (!curSys || !curTrig) return;
-    const sysId = curSys, trigId = curTrig;
-    notifAcc.innerHTML = `<div class="text-body-secondary small py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>`;
-    const errEl = document.getElementById("notifierLoadError");
-    errEl.classList.add("d-none");
-    const [n, p] = await Promise.all([
-        apiJson(`/api/systems/${sysId}/triggers/${trigId}/notifiers`),
-        apiJson(`/api/systems/${sysId}/triggers/${trigId}/pushover/settings`),
-    ]);
-    if (sysId !== curSys || trigId !== curTrig) return;           // another trigger was opened meanwhile
-    if (!n.success) {
-        notifAcc.innerHTML = "";
-        errEl.textContent = n.message || "Couldn't load the notifiers.";
-        errEl.classList.remove("d-none");
-        return;
+    async function load() {
+        if (!curSys || !ownerId()) return;
+        const sysId = curSys, id = ownerId();
+        acc.innerHTML = `<div class="text-body-secondary small py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>`;
+        errEl.classList.add("d-none");
+        const [n, p] = await Promise.all([
+            apiJson(`${base()}/notifiers`),
+            isGroup ? Promise.resolve({ success: true, result: {} }) : apiJson(`${base()}/pushover/settings`),
+        ]);
+        if (sysId !== curSys || id !== ownerId()) return;           // something else was opened meanwhile
+        if (!n.success) {
+            acc.innerHTML = "";
+            errEl.textContent = n.message || "Couldn't load the notifiers.";
+            errEl.classList.remove("d-none");
+            return;
+        }
+        st = { ...n.result, pushover: p.success ? p.result : {} };
+        render();
     }
-    notifState = { ...n.result, pushover: p.success ? p.result : {} };
-    renderNotifiers();
-}
 
-async function saveNotifier(form) {
-    const ch = form.dataset.ch;
-    const name = notifDef(ch).name;
-    const data = readNotifierForm(form);
-    let rsp;
-    if (ch === "pushover") {
-        const { enabled, ...rest } = data;
-        if (enabled && !(rest.pushover_group_token && rest.pushover_app_token)) {
-            rsp = { success: false, message: "Enter the Pushover group key and app token." };
+    async function save(form) {
+        const ch = form.dataset.ch;
+        const name = notifDef(ch).name;
+        const data = readForm(form);
+        let rsp;
+        if (ch === "pushover" && !isGroup) {
+            const { enabled, ...rest } = data;
+            if (enabled && !(rest.pushover_group_token && rest.pushover_app_token)) {
+                rsp = { success: false, message: "Enter the Pushover group key and app token." };
+            } else {
+                rsp = await apiJson(`${base()}/pushover/settings`,
+                    { method: "PATCH", body: { ...rest, enable_pushover: enabled } });
+                if (rsp.success) st.pushover = rsp.result;
+            }
         } else {
-            rsp = await apiJson(`/api/systems/${curSys}/triggers/${curTrig}/pushover/settings`,
-                { method: "PATCH", body: { ...rest, enable_pushover: enabled } });
-            if (rsp.success) notifState.pushover = rsp.result;
+            rsp = await apiJson(`${base()}/notifiers/${ch}`, { method: "PUT", body: data });
+            if (rsp.success) {
+                st.channels[ch] = rsp.result;
+                fillRowsOnly(form, ch);          // show the cleaned-up rows (blank ones dropped)
+            }
         }
-    } else {
-        rsp = await apiJson(`/api/systems/${curSys}/triggers/${curTrig}/notifiers/${ch}`, { method: "PUT", body: data });
         if (rsp.success) {
-            notifState.channels[ch] = rsp.result;
-            fillRowsOnly(form, ch);          // show the cleaned-up rows (blank ones dropped)
+            setStatus(ch);
+            updateCount();
+            const what = isGroup ? "group alert" : "own alert";
+            showAlert(`${name} ${data.enabled ? `${what} on and saved` : "saved"}.`, "success");
+            if (isGroup) onGroupChannelsChanged();
+        } else {
+            showAlert(rsp.message || `Couldn't save ${name}.`, "danger");
         }
+        return rsp.success;
     }
-    if (rsp.success) {
-        setNotifierStatus(ch);
-        updateNotifierCount();
-        showAlert(`${name} ${data.enabled ? "own alert on and saved" : "saved"}.`, "success");
-    } else {
-        showAlert(rsp.message || `Couldn't save ${name}.`, "danger");
-    }
-    return rsp.success;
-}
 
-function fillRowsOnly(form, ch) {
-    const v = notifValues(ch);
-    notifDef(ch).fields.filter(f => f.type === "rows").forEach(f => {
-        form.querySelector(`.notif-rows[data-rows="${f.k}"]`).innerHTML = (v[f.k] || []).map(r => rowHtml(f, r)).join("");
+    function fillRowsOnly(form, ch) {
+        const v = values(ch);
+        notifDef(ch).fields.filter(f => f.type === "rows").forEach(f => {
+            form.querySelector(`.notif-rows[data-rows="${f.k}"]`).innerHTML = (v[f.k] || []).map(r => rowHtml(f, r)).join("");
+        });
+    }
+
+    async function saveSystemInclude(form, input) {
+        const ch = form.dataset.ch;
+        const name = notifDef(ch).name;
+        const rsp = await apiJson(`${base()}/notifiers/${ch}/system`,
+            { method: "PUT", body: { include: input.checked ? 1 : 0 } });
+        if (rsp.success) {
+            st.system_includes = { ...(st.system_includes || {}), [ch]: rsp.result.include };
+            setStatus(ch);
+            showAlert(input.checked ? `Included in the system's ${name} alert.` : `Left out of the system's ${name} alert.`, "success");
+        } else {
+            showAlert(rsp.message || `Couldn't save.`, "danger");
+        }
+        return rsp.success;
+    }
+
+    acc.addEventListener("submit", async ev => {
+        ev.preventDefault();
+        const form = ev.target.closest("form.notif-form");
+        const btn = form.querySelector("button[type=submit]");
+        btn.disabled = true;
+        await save(form);
+        btn.disabled = false;
     });
+
+    acc.addEventListener("input", ev => {
+        // keep the color picker and its text box in step
+        if (ev.target.dataset.colorFor) {
+            document.getElementById(ev.target.dataset.colorFor).value = ev.target.value.toUpperCase();
+        } else if (ev.target.closest(".input-group")?.querySelector("[data-color-for]") && /^#[0-9a-f]{6}$/i.test(ev.target.value)) {
+            ev.target.closest(".input-group").querySelector("[data-color-for]").value = ev.target.value;
+        }
+    });
+
+    acc.addEventListener("change", ev => {
+        if (ev.target.name === "post_type") toggleFacebookBg(ev.target.form);
+        if (ev.target.dataset.reveals) revealGroup(ev.target);
+    });
+
+    acc.addEventListener("change", async ev => {
+        // Both switches save right away; the alert switch flips back if it can't be turned on yet
+        const name = ev.target.name;
+        if (name !== "enabled" && name !== "include_system") return;
+        const form = ev.target.closest("form.notif-form");
+        ev.target.disabled = true;
+        const ok = name === "enabled" ? await save(form) : await saveSystemInclude(form, ev.target);
+        if (!ok) ev.target.checked = !ev.target.checked;
+        ev.target.disabled = false;
+    });
+
+    acc.addEventListener("click", async ev => {
+        const btn = ev.target.closest("[data-act]");
+        if (!btn) return;
+        const form = btn.closest("form.notif-form");
+        const act = btn.dataset.act;
+        if (act === "reveal") {
+            const input = btn.parentElement.querySelector("input");
+            input.type = input.type === "password" ? "text" : "password";
+            btn.querySelector("i").className = input.type === "password" ? "bi bi-eye" : "bi bi-eye-slash";
+            return;
+        }
+        if (act === "add-row") {
+            const f = notifDef(form.dataset.ch).fields.find(x => x.k === btn.dataset.rows);
+            const box = form.querySelector(`.notif-rows[data-rows="${f.k}"]`);
+            box.insertAdjacentHTML("beforeend", rowHtml(f));
+            box.lastElementChild.querySelector("input").focus();
+            return;
+        }
+        if (act === "del-row") {
+            btn.closest(".notif-row").remove();
+            return;
+        }
+        if (act !== "test") return;
+        const ch = form.dataset.ch;
+        const name = notifDef(ch).name;
+        const old = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Sending…`;
+        const rsp = await apiJson(`${base()}/notifiers/${ch}/test`, { method: "POST", body: readForm(form) });
+        btn.disabled = false;
+        btn.innerHTML = old;
+        showAlert(rsp.message || (rsp.success ? `Test sent to ${name}.` : `${name} test failed.`), rsp.success ? "success" : "danger");
+    });
+
+    return { load };
 }
 
-async function saveSystemInclude(form, input) {
-    const ch = form.dataset.ch;
-    const name = notifDef(ch).name;
-    const rsp = await apiJson(`/api/systems/${curSys}/triggers/${curTrig}/notifiers/${ch}/system`,
-        { method: "PUT", body: { include: input.checked ? 1 : 0 } });
-    if (rsp.success) {
-        notifState.system_includes = { ...(notifState.system_includes || {}), [ch]: rsp.result.include };
-        setNotifierStatus(ch);
-        showAlert(input.checked ? `Included in the system's ${name} alert.` : `Left out of the system's ${name} alert.`, "success");
+const triggerNotifiers = makeNotifierEditor({
+    kind: "trigger",
+    acc: document.getElementById("notifierAcc"),
+    countEl: document.getElementById("notifierOnCount"),
+    errEl: document.getElementById("notifierLoadError"),
+});
+const loadNotifiers = () => triggerNotifiers.load();
+
+
+
+/* ===================================================================
+   14) TRIGGER GROUPS - e.g. Fire / EMS: each group sends its own alerts
+       (one per call) for its triggers, with its own Facebook background
+   ===================================================================*/
+
+const groupsCard   = document.getElementById("groupsCard");
+const groupChips   = document.getElementById("groupChips");
+const groupEdEl    = document.getElementById("groupEditor");
+const groupEditor  = bootstrap.Offcanvas.getOrCreateInstance(groupEdEl);
+const groupForm    = document.getElementById("groupGeneralForm");
+const groupMembers = document.getElementById("groupMembers");
+const groupAddEl   = document.getElementById("groupAddModal");
+const groupDelEl   = document.getElementById("groupDeleteModal");
+const trigGroupSel = document.getElementById("updateTriggerGroup");
+const CHANNEL_ICONS = Object.fromEntries(NOTIFIERS.map(n => [n.key, [n.icon, n.name]]));
+
+const groupNotifiers = makeNotifierEditor({
+    kind: "group",
+    acc: document.getElementById("groupNotifierAcc"),
+    countEl: document.getElementById("groupNotifierOnCount"),
+    errEl: document.getElementById("groupNotifierLoadError"),
+});
+
+function groupById(id) {
+    return groupRows.find(g => String(g.alert_trigger_group_id) === String(id));
+}
+
+async function loadGroups() {
+    if (!curSys) { groupRows = []; return; }
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups`);
+    groupRows = rsp.success ? (rsp.result || []) : [];
+}
+
+/** The chips above the list, and the Group dropdown in the trigger editor */
+function renderGroups() {
+    groupsCard.classList.toggle("d-none", !curSys);
+    document.getElementById("groupsEmpty").classList.toggle("d-none", groupRows.length > 0);
+    groupChips.innerHTML = groupRows.map(g => {
+        const icons = (g.channels_on || []).map(ch =>
+            `<i class="bi ${CHANNEL_ICONS[ch][0]}" title="${esc(CHANNEL_ICONS[ch][1])} alert on"></i>`).join("");
+        return `<button type="button" class="btn btn-sm grp-chip" data-group-id="${g.alert_trigger_group_id}" title="Edit group">
+            <span class="grp-dot" style="background:${esc(g.group_color)}"></span>${esc(g.group_name)}
+            <span class="grp-chip-count" title="Triggers">${g.trigger_count}</span>${icons ? `<span class="grp-chip-icons">${icons}</span>` : ""}</button>`;
+    }).join("");
+    const cur = trigGroupSel.value;
+    trigGroupSel.innerHTML = `<option value="">No group</option>` +
+        groupRows.map(g => `<option value="${g.alert_trigger_group_id}">${esc(g.group_name)}</option>`).join("");
+    trigGroupSel.value = cur;
+}
+
+/** After a group alert is switched on / off: refresh the chips (their channel icons) */
+async function onGroupChannelsChanged() {
+    await loadGroups();
+    renderGroups();
+}
+
+function openGroup(id) {
+    const g = groupById(id);
+    if (!g) return;
+    curGroup = String(id);
+    document.getElementById("groupEditorTitle").textContent = g.group_name;
+    groupForm.elements.group_name.value = g.group_name;
+    groupForm.elements.group_color.value = g.group_color || "#6C757D";
+    renderGroupMembers();
+    bootstrap.Tab.getOrCreateInstance(document.querySelector('#groupTabs [data-bs-target="#grp-general"]')).show();
+    groupNotifiers.load();
+    groupEditor.show();
+}
+
+function renderGroupMembers() {
+    if (!triggerRows.length) {
+        groupMembers.innerHTML = `<div class="small text-secondary">This system has no triggers yet.</div>`;
+        return;
+    }
+    groupMembers.innerHTML = triggerRows.map(t => {
+        const gid = t.alert_trigger_group_id;
+        const other = gid && String(gid) !== curGroup ? groupById(gid) : null;
+        const id = `grp-m-${t.alert_trigger_id}`;
+        return `<div class="form-check grp-member">
+            <input class="form-check-input" type="checkbox" id="${id}" data-trigger-id="${t.alert_trigger_id}"${String(gid) === curGroup ? " checked" : ""}>
+            <label class="form-check-label" for="${id}">${esc(t.alert_trigger_name)}${
+                other ? ` <span class="small text-secondary">(now in ${esc(other.group_name)})</span>` : ""}</label></div>`;
+    }).join("");
+}
+
+/** Put a trigger in a group (or none) and refresh what shows it */
+async function setTriggerGroup(triggerId, groupId) {
+    const rsp = await apiJson(`/api/systems/${curSys}/triggers/${triggerId}/group`,
+        { method: "PUT", body: { alert_trigger_group_id: groupId || "" } });
+    if (!rsp.success) {
+        showAlert(rsp.message || "Couldn't change the group.", "danger");
+        return false;
+    }
+    const t = triggerRows.find(x => String(x.alert_trigger_id) === String(triggerId));
+    if (t) t.alert_trigger_group_id = rsp.result.alert_trigger_group_id;
+    await loadGroups();
+    renderGroups();
+    renderTriggerList();
+    return true;
+}
+
+groupChips.addEventListener("click", ev => {
+    const chip = ev.target.closest("[data-group-id]");
+    if (chip) openGroup(chip.dataset.groupId);
+});
+
+groupMembers.addEventListener("change", async ev => {
+    const box = ev.target.closest("input[data-trigger-id]");
+    if (!box) return;
+    box.disabled = true;
+    const ok = await setTriggerGroup(box.dataset.triggerId, box.checked ? curGroup : "");
+    if (!ok) box.checked = !box.checked;
+    else showAlert(box.checked ? `Added to ${groupById(curGroup)?.group_name}.` : "Taken out of the group.", "success");
+    renderGroupMembers();
+});
+
+trigGroupSel.addEventListener("change", async () => {
+    trigGroupSel.disabled = true;
+    const t = triggerRows.find(x => String(x.alert_trigger_id) === String(curTrig));
+    const before = t?.alert_trigger_group_id ?? "";
+    const wanted = trigGroupSel.value;
+    if (await setTriggerGroup(curTrig, wanted)) {
+        trigGroupSel.value = wanted;
+        showAlert(wanted ? `Now in ${groupById(wanted)?.group_name}.` : "No group now.", "success");
+        loadNotifiers();                 // the Notifiers tab shows the group's alerts
     } else {
-        showAlert(rsp.message || `Couldn't save.`, "danger");
+        trigGroupSel.value = String(before ?? "");
     }
-    return rsp.success;
-}
+    trigGroupSel.disabled = false;
+});
 
-notifAcc.addEventListener("submit", async ev => {
+document.getElementById("addGroupBtn").addEventListener("click", () => {
+    document.getElementById("groupAddForm").reset();
+    bootstrap.Modal.getOrCreateInstance(groupAddEl).show();
+});
+groupAddEl.addEventListener("shown.bs.modal", () => document.getElementById("groupAddName").focus());
+
+document.getElementById("groupAddForm").addEventListener("submit", async ev => {
     ev.preventDefault();
-    const form = ev.target.closest("form.notif-form");
-    const btn = form.querySelector("button[type=submit]");
-    btn.disabled = true;
-    await saveNotifier(form);
-    btn.disabled = false;
+    const f = ev.target;
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups`, { method: "POST",
+        body: { group_name: f.elements.group_name.value, group_color: f.elements.group_color.value } });
+    if (!rsp.success) { showAlert(rsp.message || "Couldn't add the group.", "danger"); return; }
+    bootstrap.Modal.getOrCreateInstance(groupAddEl).hide();
+    showAlert(`Group “${rsp.result.group_name}” added. Tick its triggers.`, "success");
+    await loadGroups();
+    renderGroups();
+    renderTriggerList();
+    openGroup(rsp.result.alert_trigger_group_id);
 });
 
-notifAcc.addEventListener("input", ev => {
-    // keep the color picker and its text box in step
-    if (ev.target.dataset.colorFor) {
-        document.getElementById(ev.target.dataset.colorFor).value = ev.target.value.toUpperCase();
-    } else if (ev.target.closest(".input-group")?.querySelector("[data-color-for]") && /^#[0-9a-f]{6}$/i.test(ev.target.value)) {
-        ev.target.closest(".input-group").querySelector("[data-color-for]").value = ev.target.value;
-    }
+groupForm.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/${curGroup}`, { method: "PATCH",
+        body: { group_name: groupForm.elements.group_name.value, group_color: groupForm.elements.group_color.value } });
+    showAlert(rsp.message || (rsp.success ? "Group saved." : "Couldn't save the group."), rsp.success ? "success" : "danger");
+    if (!rsp.success) return;
+    document.getElementById("groupEditorTitle").textContent = rsp.result.group_name;
+    await loadGroups();
+    renderGroups();
+    renderTriggerList();
 });
 
-notifAcc.addEventListener("change", ev => {
-    if (ev.target.name === "post_type") toggleFacebookBg(ev.target.form);
-    if (ev.target.dataset.reveals) revealGroup(ev.target);
+document.getElementById("deleteGroupBtn").addEventListener("click", () => {
+    document.getElementById("groupDeleteQuestion").textContent = `Delete the group “${groupById(curGroup)?.group_name ?? ""}”?`;
+    bootstrap.Modal.getOrCreateInstance(groupDelEl).show();
 });
 
-notifAcc.addEventListener("change", async ev => {
-    // Both switches save right away; the own-alert switch flips back if it can't be turned on yet
-    const name = ev.target.name;
-    if (name !== "enabled" && name !== "include_system") return;
-    const form = ev.target.closest("form.notif-form");
-    ev.target.disabled = true;
-    const ok = name === "enabled" ? await saveNotifier(form) : await saveSystemInclude(form, ev.target);
-    if (!ok) ev.target.checked = !ev.target.checked;
-    ev.target.disabled = false;
+document.getElementById("groupDeleteForm").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const rsp = await apiJson(`/api/systems/${curSys}/trigger-groups/${curGroup}`, { method: "DELETE" });
+    bootstrap.Modal.getOrCreateInstance(groupDelEl).hide();
+    showAlert(rsp.message || (rsp.success ? "Group deleted." : "Couldn't delete the group."), rsp.success ? "success" : "danger");
+    if (!rsp.success) return;
+    triggerRows.forEach(t => { if (String(t.alert_trigger_group_id) === curGroup) t.alert_trigger_group_id = null; });
+    groupEditor.hide();
+    await loadGroups();
+    renderGroups();
+    renderTriggerList();
 });
 
-notifAcc.addEventListener("click", async ev => {
-    const btn = ev.target.closest("[data-act]");
-    if (!btn) return;
-    const form = btn.closest("form.notif-form");
-    const act = btn.dataset.act;
-    if (act === "reveal") {
-        const input = btn.parentElement.querySelector("input");
-        input.type = input.type === "password" ? "text" : "password";
-        btn.querySelector("i").className = input.type === "password" ? "bi bi-eye" : "bi bi-eye-slash";
-        return;
-    }
-    if (act === "add-row") {
-        const f = notifDef(form.dataset.ch).fields.find(x => x.k === btn.dataset.rows);
-        const box = form.querySelector(`.notif-rows[data-rows="${f.k}"]`);
-        box.insertAdjacentHTML("beforeend", rowHtml(f));
-        box.lastElementChild.querySelector("input").focus();
-        return;
-    }
-    if (act === "del-row") {
-        btn.closest(".notif-row").remove();
-        return;
-    }
-    if (act !== "test") return;
-    const ch = form.dataset.ch;
-    const name = notifDef(ch).name;
-    const old = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Sending…`;
-    const rsp = await apiJson(`/api/systems/${curSys}/triggers/${curTrig}/notifiers/${ch}/test`,
-        { method: "POST", body: readNotifierForm(form) });
-    btn.disabled = false;
-    btn.innerHTML = old;
-    showAlert(rsp.message || (rsp.success ? `Test sent to ${name}.` : `${name} test failed.`), rsp.success ? "success" : "danger");
-});
+groupEdEl.addEventListener("hidden.bs.offcanvas", () => { curGroup = null; });
+
+// Modals opened from the side panels must live at <body> level to stack above them
+document.body.appendChild(groupAddEl);
+document.body.appendChild(groupDelEl);

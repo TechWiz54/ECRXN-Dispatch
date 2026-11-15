@@ -112,6 +112,19 @@ def main():
          "attach_audio": 1})
     api("PUT", f"/api/systems/{sid}/triggers/{tids[1]}/notifiers/email",
         {"enabled": 1, "recipients": "ems-chief@example.com", "attach_audio": 1})
+    # trigger groups: Fire posts its own Facebook video, EMS its own Discord alert
+    blank_gid = api("POST", f"/api/systems/{sid}/trigger-groups", {"group_name": "Blank"})["result"]["alert_trigger_group_id"]
+    blank_group_notifiers = c.get(f"/api/systems/{sid}/trigger-groups/{blank_gid}/notifiers").get_json()["result"]
+    api("DELETE", f"/api/systems/{sid}/trigger-groups/{blank_gid}")
+    fire = api("POST", f"/api/systems/{sid}/trigger-groups", {"group_name": "Fire", "group_color": "#D9534F"})["result"]
+    ems = api("POST", f"/api/systems/{sid}/trigger-groups", {"group_name": "EMS", "group_color": "#0D6EFD"})["result"]
+    for tid, g in ((tids[0], fire), (tids[2], fire), (tids[1], ems)):
+        api("PUT", f"/api/systems/{sid}/triggers/{tid}/group", {"alert_trigger_group_id": g["alert_trigger_group_id"]})
+    api("PUT", f"/api/systems/{sid}/trigger-groups/{fire['alert_trigger_group_id']}/notifiers/facebook",
+        {"enabled": 1, "page_id": "100000000000002", "post_type": "video",
+         "message_body": "{group_name} Dispatch Alert: {trigger_list} at {timestamp_24}\n\n{transcript}"})
+    api("PUT", f"/api/systems/{sid}/trigger-groups/{ems['alert_trigger_group_id']}/notifiers/discord",
+        {"enabled": 1, "webhook_url": "https://discord.com/api/webhooks/0/ems", "message": "{group_name}: {trigger_list}"})
 
     key = c.get("/api/systems?include_config=1").get_json()["result"][0]["api_key"]
     audio_dir = tmp / "audio"
@@ -140,6 +153,10 @@ def main():
         tid = t["alert_trigger_id"]
         data["notifiers"][tid] = c.get(f"/api/systems/{sid}/triggers/{tid}/notifiers").get_json()["result"]
         data["pushover"][tid] = c.get(f"/api/systems/{sid}/triggers/{tid}/pushover/settings").get_json()["result"]
+    data["groups"] = c.get(f"/api/systems/{sid}/trigger-groups").get_json()["result"]
+    data["group_notifiers"] = {g["alert_trigger_group_id"]: c.get(
+        f"/api/systems/{sid}/trigger-groups/{g['alert_trigger_group_id']}/notifiers").get_json()["result"] for g in data["groups"]}
+    data["blank_group_notifiers"] = blank_group_notifiers
     data["unmatched"] = c.get(f"/api/tone-finder/unmatched?radio_system_id={sid}&days=365").get_json()["result"]
     calls = c.get(f"/api/tone-finder/calls?radio_system_id={sid}&limit=100").get_json()
     data["calls"] = calls

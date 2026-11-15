@@ -50,7 +50,9 @@ class ImportError_(ValueError):
 # Schema
 # ─────────────────────────────────────────────────────────────────────────────
 def _schema(db) -> Dict[str, Dict[str, Any]]:
-    """{table: {cols, notnull, pk:[...], parent:(table, fk_col, parent_col) | None}}"""
+    """{table: {cols, notnull, pk:[...], parent:(table, fk_col, parent_col) | None, refs:[(table, fk_col, parent_col)]}}
+    The parent is the table's one ON DELETE CASCADE key (its owner); other keys (e.g. a trigger's group,
+    ON DELETE SET NULL) are refs, renumbered on import when the row they point to came along, else cleared."""
     tables = [r["name"] for r in db.execute_query(
         "SELECT name FROM sqlite_master WHERE type='table'", fetch_mode="all")["result"]]
     out: Dict[str, Dict[str, Any]] = {}
@@ -59,17 +61,21 @@ def _schema(db) -> Dict[str, Dict[str, Any]]:
             continue
         info = db.execute_query(f"PRAGMA table_info({t})", fetch_mode="all")["result"]
         fks = db.execute_query(f"PRAGMA foreign_key_list({t})", fetch_mode="all")["result"]
+        owners = [f for f in fks if str(f.get("on_delete") or "").upper() == "CASCADE"] if len(fks) > 1 else fks
+        parent = (owners[0]["table"], owners[0]["from"], owners[0]["to"]) if len(owners) == 1 else None
         out[t] = {
             "cols": [c["name"] for c in info],
             "notnull": {c["name"] for c in info if c["notnull"]},
             "pk": [c["name"] for c in sorted(info, key=lambda c: c["pk"]) if c["pk"]],
-            "parent": (fks[0]["table"], fks[0]["from"], fks[0]["to"]) if len(fks) == 1 else None,
+            "parent": parent,
+            "refs": [(f["table"], f["from"], f["to"]) for f in fks if parent and f["from"] != parent[1]],
         }
     return out
 
 
 def _tree(schema, root: str) -> List[str]:
-    """Tables under `root`, parents before children (root first)."""
+    """Tables under `root`, parents before children (root first); a table also comes after the tables
+    its refs point to (so trigger groups are imported before the triggers in them)."""
     order, queue = [root], [root]
     while queue:
         parent = queue.pop(0)
@@ -77,6 +83,11 @@ def _tree(schema, root: str) -> List[str]:
             if meta["parent"] and meta["parent"][0] == parent and t not in order:
                 order.append(t)
                 queue.append(t)
+    for t in list(order):
+        for rtable, _c, _p in schema[t].get("refs") or []:
+            if rtable in order and order.index(rtable) > order.index(t):
+                order.remove(rtable)
+                order.insert(order.index(t), rtable)
     return order
 
 
@@ -96,11 +107,11 @@ def _scrub(table: str, row: Dict[str, Any], secrets: bool) -> Dict[str, Any]:
     for c in list(row):
         if c in FILE_COLUMNS or (not secrets and c in SECRET_COLUMNS):
             row[c] = None
-    if table == "alert_trigger_notifiers" and row.get("config"):
+    if table in ("alert_trigger_notifiers", "alert_trigger_group_notifiers") and row.get("config"):
         try:
             cfg = json.loads(row["config"])
             for k in list(cfg):
-                if k in FILE_JSON_KEYS or (not secrets and k in SECRET_JSON_KEYS):
+                if k in FILE_JSON_KEYS or (not secrets and (k in SECRET_JSON_KEYS or k in SECRET_COLUMNS)):
                     cfg[k] = ""
             row["config"] = json.dumps(cfg)
         except ValueError:
@@ -196,6 +207,9 @@ def _insert_rows(db, schema, doc_tables, order: List[str], idmap: Dict[str, Dict
                 continue
             vals = {k: v for k, v in r.items() if k in cols_ok and k != own}
             vals[fk] = new_parent
+            for rtable, rcol, _rpcol in meta.get("refs") or []:
+                if vals.get(rcol) is not None:     # e.g. a trigger's group: the new group's id, if it came along
+                    vals[rcol] = idmap.get(rtable, {}).get(vals[rcol])
             for k in meta["notnull"]:
                 if k in vals and vals[k] is None:
                     vals.pop(k)         # let the column default apply

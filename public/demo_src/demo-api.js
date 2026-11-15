@@ -9,7 +9,7 @@
  *********************************************************************/
 (function () {
     "use strict";
-    const KEY = "ecrxnDemoState.v2";
+    const KEY = "ecrxnDemoState.v3";
     const MAX_AGE_S = 3600;                 // start over after an hour
     const clone = o => JSON.parse(JSON.stringify(o));
     const now = () => Math.floor(Date.now() / 1000);
@@ -29,6 +29,8 @@
         d.blankNotifiers = clone(Object.values(d.notifiers).find(n =>
             Object.values(n.channels).every(c => !c.enabled)) || Object.values(d.notifiers)[0]);
         (d.unmatched || []).forEach(g => { g.last_epoch += shift; });
+        d.groups = d.groups || [];
+        d.group_notifiers = d.group_notifiers || {};
         d.nextId = 1000;
         d.createdAt = now();
         return d;
@@ -51,6 +53,61 @@
     const sys = id => S.systems.find(s => +s.radio_system_id === +id);
     const trig = id => S.triggers.find(t => +t.alert_trigger_id === +id);
     const clean = b => { const o = { ...(b || {}) }; delete o._csrf_token; delete o.csrf_token; return o; };
+    const group = id => S.groups.find(g => +g.alert_trigger_group_id === +id);
+
+    /** A group as the server lists it: trigger count and which of its alerts are on, worked out now */
+    function groupRow(g) {
+        const chans = (S.group_notifiers[g.alert_trigger_group_id] || {}).channels || {};
+        return { ...g, trigger_count: S.triggers.filter(t => +t.alert_trigger_group_id === +g.alert_trigger_group_id).length,
+                 channels_on: Object.keys(chans).filter(ch => +chans[ch].enabled) };
+    }
+
+    function groupsApi(method, sid, grest, body) {
+        let m;
+        const name = String(body.group_name || "").trim().replace(/\s+/g, " ");
+        const taken = (id) => S.groups.some(g => +g.radio_system_id === sid && +g.alert_trigger_group_id !== +id
+                                              && g.group_name.toLowerCase() === name.toLowerCase());
+        if (grest === "") {
+            if (method === "POST") {
+                if (!name) return fail("Enter a name for the group.");
+                if (taken(0)) return fail(`There's already a group called “${name}”.`);
+                const g = { alert_trigger_group_id: nextId(), radio_system_id: sid, group_name: name,
+                            group_color: String(body.group_color || "#6C757D").toUpperCase() };
+                S.groups.push(g);
+                S.group_notifiers[g.alert_trigger_group_id] = clone(S.blank_group_notifiers);
+                return ok(groupRow(g), "Group added.");
+            }
+            return ok(S.groups.filter(g => +g.radio_system_id === sid).map(groupRow)
+                .sort((a, b) => a.group_name.localeCompare(b.group_name)));
+        }
+        if (!(m = grest.match(/^\/(\d+)(\/.*)?$/))) return fail("Not available in the demo.", 404);
+        const g = group(m[1]), gr = m[2] || "";
+        if (!g || +g.radio_system_id !== sid) return fail("Group not found for this system.", 404);
+        const n = S.group_notifiers[g.alert_trigger_group_id] = S.group_notifiers[g.alert_trigger_group_id] || clone(S.blank_group_notifiers);
+        if (gr === "") {
+            if (method === "DELETE") {
+                S.groups = S.groups.filter(x => x !== g);
+                delete S.group_notifiers[g.alert_trigger_group_id];
+                S.triggers.forEach(t => { if (+t.alert_trigger_group_id === +g.alert_trigger_group_id) t.alert_trigger_group_id = null; });
+                return ok(null, "Group deleted. Its triggers are kept, without a group.");
+            }
+            if (!name) return fail("Enter a name for the group.");
+            if (taken(g.alert_trigger_group_id)) return fail(`There's already a group called “${name}”.`);
+            Object.assign(g, { group_name: name, group_color: String(body.group_color || g.group_color).toUpperCase() });
+            return ok(groupRow(g), "Group saved.");
+        }
+        if (gr === "/notifiers") return ok({ ...n, group: groupRow(g) });
+        if (/^\/notifiers\/[a-z0-9]+\/test$/.test(gr)) return ok([], DEMO_SENT);
+        if (/\/facebook\/(background|preview)$/.test(gr)) return method === "GET" ? fail("No background.", 404) : fail("Uploads are turned off in the demo.");
+        if ((m = gr.match(/^\/notifiers\/([a-z0-9]+)$/))) {
+            const ch = n.channels[m[1]];
+            if (!ch) return fail("Unknown notifier.", 404);
+            Object.assign(ch, clean(body));
+            ch.enabled = +body.enabled ? 1 : 0;
+            return ok(ch, "Saved.");
+        }
+        return fail("Not available in the demo.", 404);
+    }
 
     /** Merge form keys like "telegram_bot_token" / "smtp_hostname" into a settings object */
     function mergeSection(obj, section, body) {
@@ -179,6 +236,7 @@
             if (method === "DELETE") {
                 S.systems = S.systems.filter(x => x !== s);
                 S.triggers = S.triggers.filter(t => +t.radio_system_id !== sid);
+                S.groups = S.groups.filter(g => +g.radio_system_id !== sid);
                 return ok([], "System deleted.");
             }
             if (method === "PATCH") Object.assign(s, clean(body));
@@ -224,6 +282,9 @@
             }
             return ok(s[sec], "Settings saved.");
         }
+
+        // trigger groups
+        if ((m = rest.match(/^\/trigger-groups(\/.*)?$/))) return groupsApi(method, sid, m[1] || "", body);
 
         // triggers
         if (rest === "/triggers/export") return ok({});
@@ -274,8 +335,18 @@
             if (method !== "GET") Object.assign(S.pushover[tid], clean(body));
             return ok(S.pushover[tid], "Pushover settings updated.");
         }
+        if (trest === "/group") {
+            const gid = +body.alert_trigger_group_id || null;
+            const g = gid && group(gid);
+            if (gid && (!g || +g.radio_system_id !== sid)) return fail("That group isn't on this system.");
+            t.alert_trigger_group_id = gid;
+            return ok({ alert_trigger_group_id: gid }, "Group changed.");
+        }
         const n = S.notifiers[tid] = S.notifiers[tid] || clone(S.blankNotifiers);
-        if (trest === "/notifiers") return ok(n);
+        if (trest === "/notifiers") {
+            const g = t.alert_trigger_group_id && group(t.alert_trigger_group_id);
+            return ok({ ...n, group: g ? { ...groupRow(g), facebook_background: null } : null });
+        }
         if ((m = trest.match(/^\/notifiers\/([a-z0-9]+)\/system$/))) {
             n.system_includes[m[1]] = +body.include ? 1 : 0;
             return ok({ include: n.system_includes[m[1]] }, "Saved.");

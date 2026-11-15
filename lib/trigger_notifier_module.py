@@ -23,11 +23,14 @@ from lib.email_module import EmailSender
 from lib.facebook_module import FacebookSender
 from lib.make_module import MakeSender
 from lib.n8n_module import N8nSender
+from lib.pushover_module import PushoverSender
 from lib.telegram_module import TelegramSender
 
 module_logger = logging.getLogger("icad_dispatch.trigger_notifier_module")
 
 CHANNELS = ("telegram", "discord", "make", "email", "n8n", "facebook")
+# A trigger group's alert can also go to Pushover (a trigger's own Pushover lives in its own table)
+GROUP_CHANNELS = ("telegram", "discord", "make", "pushover", "email", "n8n", "facebook")
 # Channels a system can alert on (a trigger can be left out of each one)
 SYSTEM_CHANNELS = ("telegram", "discord", "make", "pushover", "email", "n8n", "facebook")
 SYSTEM_INCLUDE_DEFAULT = {"pushover": 1}
@@ -42,6 +45,7 @@ CHANNEL_FIELDS: Dict[str, Tuple[str, ...]] = {
                  "smtp_username", "smtp_password", "email_address_from", "email_text_from"),
     "n8n":      ("webhook_url", "jwt_passphrase", "attach_audio"),
     "facebook": ("page_id", "page_token", "post_type", "message_body"),
+    "pushover": ("pushover_group_token", "pushover_app_token", "pushover_subject", "pushover_body", "pushover_sound"),
 }
 
 # Fields only the server sets (e.g. an uploaded file), kept when the form is saved
@@ -55,6 +59,7 @@ DESTINATION: Dict[str, Tuple[str, str]] = {
     "email":    ("recipients", "Enter at least one email address."),
     "n8n":      ("webhook_url", "Enter the n8n webhook URL."),
     "facebook": ("page_id", "Enter the Facebook Page ID."),
+    "pushover": ("pushover_group_token", "Enter the Pushover group / user key."),
 }
 
 _BOOL_FIELDS = {"render_map", "attach_audio", "send_audio", "own_server"}
@@ -165,7 +170,7 @@ def get_notifiers_for_triggers(db, trigger_ids: List[int]) -> Dict[int, Dict[str
 
 def clean_channel_config(channel: str, data: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], int, Optional[str]]:
     """Validate incoming settings. Returns (config, enabled, error_message)."""
-    if channel not in CHANNELS:
+    if channel not in CHANNEL_FIELDS:
         return None, 0, f"Unknown notifier '{channel}'."
     data = data or {}
     cfg: Dict[str, Any] = {}
@@ -282,6 +287,8 @@ def set_system_include(db, alert_trigger_id: int, channel: str, include: Any) ->
 
 
 def save_trigger_notifier(db, alert_trigger_id: int, channel: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    if channel not in CHANNELS:
+        return {"success": False, "message": f"Unknown notifier '{channel}'.", "result": []}
     cfg, enabled, err = clean_channel_config(channel, data)
     if err:
         return {"success": False, "message": err, "result": []}
@@ -337,6 +344,25 @@ def split_recipients(raw: Any) -> List[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 def _pick(trig_val: Any, sys_val: Any) -> Any:
     return trig_val if trig_val not in (None, "") else sys_val
+
+
+def layer_over_group(channel: str, cfg: Dict[str, Any], group_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """A trigger's own settings with its blank tokens / messages / background taken from its group's
+    (the system's are used after that, at send time). Where it goes and the on/off switches stay the trigger's."""
+    if not group_cfg:
+        return cfg
+    out = dict(cfg)
+    dest = DESTINATION[channel][0]
+    for k in CHANNEL_FIELDS[channel] + SERVER_FIELDS.get(channel, ()):
+        if k == dest or k in _BOOL_FIELDS or k == "post_type":
+            continue
+        if out.get(k) in (None, "", []) and group_cfg.get(k) not in (None, "", []):
+            out[k] = group_cfg[k]
+    if channel == "email" and not out.get("own_server") and group_cfg.get("own_server"):
+        for k in ("own_server", "smtp_hostname", "smtp_port", "smtp_username", "smtp_password",
+                  "email_address_from", "email_text_from"):
+            out[k] = group_cfg.get(k)
+    return out
 
 
 def _row_for(channel: str, cfg: Dict[str, Any], system_row: Dict[str, Any]) -> Dict[str, Any]:
@@ -407,6 +433,15 @@ def _row_for(channel: str, cfg: Dict[str, Any], system_row: Dict[str, Any]) -> D
             # this trigger's background, else the system's (else black)
             "background": _pick(cfg.get("background"), sys_cfg.get("background")),
         }
+    elif channel == "pushover":
+        row["pushover"] = {
+            "enabled": 1,
+            "group_token": cfg.get("pushover_group_token"),
+            "app_token": _pick(cfg.get("pushover_app_token"), sys_cfg.get("app_token") or sys_cfg.get("pushover_app_token")),
+            "subject": _pick(cfg.get("pushover_subject"), sys_cfg.get("subject") or sys_cfg.get("pushover_subject")),
+            "body": _pick(cfg.get("pushover_body"), sys_cfg.get("body") or sys_cfg.get("pushover_body")),
+            "sound": _pick(cfg.get("pushover_sound"), sys_cfg.get("sound") or sys_cfg.get("pushover_sound")),
+        }
     return row
 
 
@@ -420,6 +455,10 @@ def _missing_setting(channel: str, row: Dict[str, Any]) -> Optional[str]:
         return "No n8n passphrase - set one here or on the system's n8n settings."
     if channel == "facebook" and not c.get("page_token"):
         return "No Facebook Page access token - set one here or on the system's Facebook settings."
+    if channel == "pushover":
+        if not c.get("app_token"):
+            return "No Pushover app token - set one here or on the system's Pushover settings."
+        return None if c.get("group_token") else DESTINATION["pushover"][1]
     dest_key, dest_msg = DESTINATION[channel]
     if channel == "email":
         return None if c.get("recipients") else dest_msg
@@ -458,6 +497,8 @@ def send_channel(channel: str, cfg: Dict[str, Any], system_row: Dict[str, Any], 
             ok = EmailSender.from_system_row(row, logger=log).send(ctx)
         elif channel == "n8n":
             ok = N8nSender.from_system_row(row, logger=log).send(ctx)
+        elif channel == "pushover":
+            ok = PushoverSender.from_system_row(row, logger=log).send_system(ctx)
         else:
             fb = FacebookSender.from_system_row(row, logger=log)
             ok = fb.send(ctx)
@@ -490,8 +531,9 @@ def trigger_context(system_row: Dict[str, Any], payload: Dict[str, Any], trigger
 def dispatch_trigger_notifiers(db, system_row: Dict[str, Any], payload: Dict[str, Any],
                                fired_trigger_data: List[Dict[str, Any]], *, detect_result: Any = None,
                                transcript_text: Optional[str] = None, transcript_segments: Optional[list] = None,
-                               tz: str) -> int:
-    """Send every enabled trigger-level notifier for the fired triggers. Returns how many were sent."""
+                               tz: str, groups: Optional[Dict[int, Dict[str, Any]]] = None) -> int:
+    """Send every enabled trigger-level notifier for the fired triggers. Returns how many were sent.
+    groups ({group id: {"group": row, "channels": {...}}}) fills a trigger's blank settings from its group's."""
     ids = [int(t["alert_trigger_id"]) for t in fired_trigger_data or [] if t.get("alert_trigger_id") is not None]
     if not ids:
         return 0
@@ -502,10 +544,13 @@ def dispatch_trigger_notifiers(db, system_row: Dict[str, Any], payload: Dict[str
         active = [c for c in CHANNELS if int((cfgs.get(c) or {}).get("enabled") or 0)]
         if not active:
             continue
+        group = (groups or {}).get(int(trig.get("alert_trigger_group_id") or 0)) or {}
         ctx = trigger_context(system_row, payload, trig, detect_result=detect_result, transcript_text=transcript_text,
                               transcript_segments=transcript_segments, tz=tz)
+        ctx["group_name"] = (group.get("group") or {}).get("group_name") or ""
         for ch in active:
-            ok, msg = send_channel(ch, cfgs[ch], system_row, ctx)
+            cfg = layer_over_group(ch, cfgs[ch], (group.get("channels") or {}).get(ch))
+            ok, msg = send_channel(ch, cfg, system_row, ctx)
             module_logger.info("Trigger '%s' %s: %s", trig.get("alert_trigger_name"), ch, msg)
             sent += int(ok)
     return sent

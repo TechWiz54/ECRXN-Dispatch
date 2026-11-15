@@ -618,6 +618,7 @@ def build_context(
         # triggers
         "trigger_names": trig_names,         # list form (useful for JSON)
         "trigger_list": trigger_list,        # CSV string
+        "group_name": "",                    # set for a trigger group's alert
         "trigger_list_lines": trigger_list_lines,  # each trigger on its own line
         "trigger_count": len(trig_names),
 

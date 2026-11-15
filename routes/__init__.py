@@ -7,6 +7,7 @@ from routes.auth.auth import auth
 from routes.dashboard.dashboard import dashboard
 from routes.api.systems import api_systems
 import routes.api.trigger_notifiers  # noqa: F401  (adds trigger notifier + Facebook routes to api_systems)
+import routes.api.trigger_groups  # noqa: F401  (adds trigger group routes to api_systems)
 import routes.api.transfer  # noqa: F401  (adds export / import routes to api_systems)
 from routes.api.call_upload import api_call_upload
 from routes.api.tone_finder import bp_tone

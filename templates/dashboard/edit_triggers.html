@@ -72,6 +72,18 @@
         </div>
     </div>
 
+    <!-- Groups (e.g. Fire, EMS): each sends its own alerts for its triggers -->
+    <div class="card border-0 mb-3 trig-groups-card d-none" id="groupsCard">
+        <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center gap-2">
+            <span class="fw-semibold small me-1">Groups</span>
+            <div id="groupChips" class="d-flex flex-wrap gap-2"></div>
+            <span id="groupsEmpty" class="small text-secondary">Group triggers (e.g. Fire, EMS) so each group sends its own alerts, with its own Facebook background.</span>
+            <button id="addGroupBtn" type="button" class="btn btn-sm btn-outline-secondary ms-auto">
+                <i class="bi bi-plus-lg"></i> Add group
+            </button>
+        </div>
+    </div>
+
     <!-- Trigger list -->
     <div class="card border-0 trig-list-card">
         <div class="card-body p-0">
@@ -112,6 +124,20 @@
         </div>
         <div class="offcanvas-body">
             {% include 'partials/_dashboard_edit_trigger.html' %}
+        </div>
+    </div>
+
+    <!-- Group editor: slides in from the right -->
+    <div class="offcanvas offcanvas-end trig-editor" tabindex="-1" id="groupEditor" aria-labelledby="groupEditorTitle">
+        <div class="offcanvas-header">
+            <div>
+                <div class="small text-secondary">Edit group</div>
+                <h5 class="offcanvas-title mb-0" id="groupEditorTitle">Group</h5>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            {% include 'partials/_dashboard_edit_group.html' %}
         </div>
     </div>
 {% endblock %}

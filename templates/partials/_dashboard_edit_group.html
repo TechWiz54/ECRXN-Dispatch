@@ -1,0 +1,63 @@
+{# Group editor (Triggers page): name / color / triggers, and the group's own alerts #}
+<ul class="nav nav-pills nav-fill trig-tabs" id="groupTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#grp-general" type="button" role="tab">
+            <i class="bi bi-info-circle"></i><span>General</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#grp-notifiers" type="button" role="tab">
+            <i class="bi bi-bell"></i><span>Notifiers</span>
+            <span class="badge rounded-pill text-bg-success ms-1 d-none" id="groupNotifierOnCount"></span>
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content trig-tab-content">
+
+    {# ─────────── GENERAL ─────────── #}
+    <div class="tab-pane fade show active" id="grp-general" role="tabpanel">
+        <h5>General</h5>
+        <form id="groupGeneralForm" class="input-form mt-4" novalidate>
+            <div class="row g-3 mb-3">
+                <div class="col-8 col-md-5">
+                    <label class="form-label" for="groupName">Name:</label>
+                    <input id="groupName" class="form-control" name="group_name" maxlength="60" required>
+                </div>
+                <div class="col-4 col-md-2">
+                    <label class="form-label" for="groupColor">Color:</label>
+                    <input type="color" id="groupColor" class="form-control form-control-color w-100" name="group_color">
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-auto">
+                    <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-save"></i> Save</button>
+                </div>
+                <div class="col text-end">
+                    <button id="deleteGroupBtn" type="button" class="btn btn-sm btn-danger">Delete</button>
+                </div>
+            </div>
+        </form>
+
+        <h6 class="mt-4 mb-1">Triggers in this group</h6>
+        <p class="small text-body-secondary mb-2">Tick a trigger to put it in this group (it's saved straight away). A trigger can be in one group.</p>
+        <div id="groupMembers" class="grp-members"></div>
+    </div>
+
+    {# ─────────── NOTIFIERS (the group's alerts) ─────────── #}
+    <div class="tab-pane fade" id="grp-notifiers" role="tabpanel">
+        <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-2">
+            <h5 class="mb-0">Notifiers</h5>
+            <span class="small text-body-secondary">Sent when any of this group's triggers fire</span>
+        </div>
+        <p class="small text-body-secondary mb-3">
+            Each alert that's on goes out once per call and names the group's triggers that fired, for example
+            <strong>Station 12, Station 14</strong> in <code>{trigger_list}</code> (and the group in
+            <code>{group_name}</code>). A trigger with its own alert on a channel sends that one instead.
+            Blank tokens and messages use the system's. The system's alert is separate: turn a trigger's
+            <em>Include in the system's alert</em> off if it should only go out through its group.
+        </p>
+        <div class="accordion trig-notifiers" id="groupNotifierAcc"></div>
+        <div id="groupNotifierLoadError" class="alert alert-danger small d-none mt-2"></div>
+    </div>
+</div>

@@ -81,3 +81,53 @@
         </form>
     </div>
 </div>
+
+{# ───────────────────────────────────────────────────────
+   Add group / delete group
+   ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="groupAddModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <form id="groupAddForm" class="modal-content input-form" novalidate>
+            <div class="modal-header">
+                <h5 class="modal-title">Add Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-8">
+                        <label class="form-label" for="groupAddName">Name</label>
+                        <input class="form-control" id="groupAddName" name="group_name" maxlength="60" placeholder="e.g. Fire" required>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label" for="groupAddColor">Color</label>
+                        <input type="color" class="form-control form-control-color w-100" id="groupAddColor" name="group_color" value="#D9534F">
+                    </div>
+                </div>
+                <div class="form-text mt-2">Next you pick its triggers and set up its alerts.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="groupDeleteModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+        <form id="groupDeleteForm" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="groupDeleteQuestion" class="mb-1"></p>
+                <p class="small text-secondary mb-0">Its triggers are kept, without a group. The group's alert settings and Facebook background are deleted.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-danger" type="submit"><i class="bi bi-trash"></i> Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
