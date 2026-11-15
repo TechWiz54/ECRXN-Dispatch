@@ -252,6 +252,22 @@ def download_audio(audio_url: str, log: logging.Logger = module_logger) -> Optio
         return None
 
 
+def _silent_audio(seconds: float) -> Optional[str]:
+    """A silent MP3 (for a test video when the system has no saved call yet)."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    fd, path = tempfile.mkstemp(prefix="icad_fb_", suffix=".mp3")
+    os.close(fd)
+    p = subprocess.run([ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono",
+                        "-t", f"{seconds:.1f}", "-c:a", "libmp3lame", "-b:a", "32k", path],
+                       capture_output=True, timeout=60)
+    if p.returncode != 0 or not os.path.getsize(path):
+        os.remove(path)
+        return None
+    return path
+
+
 def render_video(audio_path: str, background: Optional[Path], *, vertical: bool = False,
                  max_seconds: Optional[float] = None, min_seconds: float = 0.0,
                  log: logging.Logger = module_logger) -> Tuple[Optional[str], Optional[str]]:
@@ -360,11 +376,15 @@ class FacebookSender:
         message = self.build_message(ctx)
         audio_url = str(ctx.get("audio_url") or "")
 
-        if self.settings.post_type == "video" and audio_url:
+        # A test before any call is saved has no audio; it still makes a (silent) video so videos can be checked
+        if self.settings.post_type == "video" and (audio_url or ctx.get("is_test")):
             ok = self._send_video(audio_url, message, timeout_s=timeout_s, max_retries=max_retries)
             if ok is not None:
                 return ok
-            self.log.warning("Facebook: couldn't make a video from the audio; posting text instead")
+            self.log.warning("Facebook: couldn't make a video (%s); posting text instead",
+                             self.last_error or "the call audio couldn't be read")
+        elif self.settings.post_type == "video":
+            self.log.warning("Facebook: this alert has no call audio, so it's posted as text instead of a video")
 
         data = {"message": message, "access_token": self.settings.page_token}
         if audio_url:
@@ -386,8 +406,9 @@ class FacebookSender:
         Upload the call audio as a video. Calls up to 90 s are made vertical (9:16) so Facebook shows them
         as a Reel; longer calls are widescreen. Returns None if no video could be made (caller posts text).
         """
-        mp3 = download_audio(audio_url, self.log)
+        mp3 = download_audio(audio_url, self.log) if audio_url else _silent_audio(5.0)
         if not mp3:
+            self.last_error = "couldn't get the call audio" if audio_url else "ffmpeg isn't installed"
             return None
         mp4 = None
         try:

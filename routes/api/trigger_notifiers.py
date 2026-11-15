@@ -147,6 +147,7 @@ def trigger_notifier_test(radio_system_id: int, alert_trigger_id: int, channel: 
                           transcript_text="This is a test alert from ECRXN Dispatch.",
                           tz=current_app.config["TIMEZONE"])
     ctx["trigger_list"] = f"[TEST] {ctx.get('trigger_list') or trigger.get('alert_trigger_name')}"
+    ctx["is_test"] = True
 
     if channel == "pushover":
         po = get_pushover_settings(db, alert_trigger_id).get("result") or {}
@@ -214,6 +215,7 @@ def systems_facebook_test(radio_system_id: int):
     ctx = trigger_context(system, _test_payload(db, system, fake_trigger), fake_trigger,
                           transcript_text="This is a test alert from ECRXN Dispatch.",
                           tz=current_app.config["TIMEZONE"])
+    ctx["is_test"] = True
     ok = sender.send(ctx)
     return jsonify(success=ok, message="Test posted to Facebook." if ok else sender.last_error, result=[]), (200 if ok else 400)
 
