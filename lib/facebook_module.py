@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import requests
 
+from lib.alert_audio import _local_file as _local_audio_file
 from lib.dispatch_text_render import expand_template, html_to_text
 
 module_logger = logging.getLogger("icad_dispatch.facebook_module")
@@ -230,6 +231,14 @@ def audio_duration(path: str) -> Optional[float]:
 
 
 def download_audio(audio_url: str, log: logging.Logger = module_logger) -> Optional[str]:
+    """The call audio as a temp file. Audio saved by this server is copied from static/audio, since the
+    server often can't reach its own BASE_URL (Docker, reverse proxies); anything else is downloaded."""
+    local = _local_audio_file(audio_url)
+    if local:
+        fd, path = tempfile.mkstemp(prefix="icad_fb_", suffix=local.suffix or ".mp3")
+        os.close(fd)
+        shutil.copyfile(local, path)
+        return path
     try:
         with requests.get(audio_url, stream=True, timeout=15) as r:
             r.raise_for_status()
