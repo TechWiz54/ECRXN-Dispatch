@@ -108,10 +108,13 @@ login? It's in `.env`: see [Forgot the admin password?](#forgot-the-admin-passwo
 
 Open the system's **General** tab and copy its **API Key**.
 
-**3. Check Tone Finder is on.** A new system has **Tone Finder** enabled (the system's **Tones** tab). Calls are
-kept when Tone Finder is on and tones were heard, or when a trigger fires; with it off, calls that match no
-trigger are accepted and then thrown away, so the dashboard stays empty. (Systems made before 1.4.2 start with it
-off: switch it on there.) Leave the other tone settings at their defaults to start.
+**3. Tone Finder is on.** Every system has **Tone Finder** switched on (the system's **Tones** tab); version 1.5
+switched it on for older systems too. Calls are kept when Tone Finder is on and tones were heard, or when a trigger
+fires; if you switch it off, calls that match no trigger are accepted and then thrown away, so the dashboard stays
+empty. Leave the other tone settings at their defaults to start.
+
+Every message box (email, Pushover, Telegram, Discord, Facebook post text, Make keys) starts filled in with a
+working message and its [placeholders](alerts.md#placeholders), so alerts make sense before you change anything.
 
 **4. Point your uploader here.** Every uploader needs three things:
 

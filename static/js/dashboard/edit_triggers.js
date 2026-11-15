@@ -2111,11 +2111,14 @@ function renderTriggerGroupBoxes() {
         return;
     }
     const mine = new Set(groupsOf(curTrig).map(g => String(g.alert_trigger_group_id)));
+    // one pill per group, in the group's colour; filled in (with a tick) when the trigger is in it
     trigGroupBoxes.innerHTML = groupRows.map(g => {
         const id = `trig-g-${g.alert_trigger_group_id}`;
-        return `<div class="form-check form-check-inline">
-            <input class="form-check-input" type="checkbox" id="${id}" data-group-id="${g.alert_trigger_group_id}"${mine.has(String(g.alert_trigger_group_id)) ? " checked" : ""}>
-            <label class="form-check-label" for="${id}">${groupDot(g)}${esc(g.group_name)}</label></div>`;
+        return `<input type="checkbox" class="btn-check" id="${id}" autocomplete="off" data-group-id="${g.alert_trigger_group_id}"${
+                mine.has(String(g.alert_trigger_group_id)) ? " checked" : ""}>
+            <label class="grp-pick" for="${id}" style="--grp:${esc(g.group_color)}">
+                <i class="bi bi-check-lg grp-pick-on" aria-hidden="true"></i><i class="bi bi-plus-lg grp-pick-off" aria-hidden="true"></i>
+                <span class="grp-pick-name">${esc(g.group_name)}</span></label>`;
     }).join("");
 }
 
